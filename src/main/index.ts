@@ -1,9 +1,28 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { createDatabase } from './database/db'
+import { AgentCrewRepository } from './database/repository'
+import { seedDefaultData } from './database/seed'
+import { registerIpcHandlers } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
-function createWindow(): void {
+async function bootstrap(): Promise<void> {
+  const userDataPath = app.getPath('userData')
+  const dbPath = join(userDataPath, 'agentcrew.db')
+
+  console.log('[AgentCrew] userData:', userDataPath)
+  console.log('[AgentCrew] database:', dbPath)
+
+  // Database
+  const db = createDatabase(dbPath)
+  const repository = new AgentCrewRepository(db)
+  seedDefaultData(db)
+
+  // IPC
+  registerIpcHandlers({ repository })
+
+  // Window
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -26,14 +45,24 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.on('closed', () => { mainWindow = null })
+
+  // Cleanup
+  app.on('before-quit', () => {
+    try { db.close() } catch { /* ignore */ }
+  })
 }
 
 app.whenReady().then(() => {
-  createWindow()
+  bootstrap().catch((err) => {
+    console.error('[AgentCrew] Bootstrap failed:', err)
+    app.quit()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+      bootstrap()
     }
   })
 })
@@ -42,4 +71,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[AgentCrew] Unhandled rejection:', reason)
 })
