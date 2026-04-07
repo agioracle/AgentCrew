@@ -358,3 +358,30 @@ select.form-input {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
 }
+
+/* ── Members Modal ─────────────────────────────────────── */
+
+.members-section {
+  margin-bottom: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.members-group-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 8px 12px;
+  background: var(--panel-soft);
+}
+
+.members-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--line-soft);
+}

@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import { useAppStore } from './store/app-store'
 import { Sidebar } from './components/Sidebar/Sidebar'
+import { ChatView } from './components/ChatView/ChatView'
+import { CreateChannelModal } from './components/Modals/CreateChannelModal'
+import { ChannelMembersModal } from './components/Modals/ChannelMembersModal'
 
 export default function App() {
   const initialized = useAppStore(s => s.initialized)
   const initialize = useAppStore(s => s.initialize)
-  const activeChannelId = useAppStore(s => s.activeChannelId)
-  const channels = useAppStore(s => s.channels)
+  const activeModal = useAppStore(s => s.activeModal)
 
   useEffect(() => {
     initialize()
@@ -28,34 +30,16 @@ export default function App() {
     )
   }
 
-  const activeChannel = channels.find(ch => ch.id === activeChannelId)
-
   return (
     <div className="workspace-shell">
       <Sidebar />
       <main className="workspace-main">
-        {activeChannel ? (
-          <div className="main-content">
-            <div className="channel-header">
-              <div className="channel-title">
-                <span className="channel-hash">#</span>
-                <span className="channel-name">{activeChannel.name}</span>
-                {activeChannel.description && (
-                  <span className="channel-desc"> — {activeChannel.description}</span>
-                )}
-              </div>
-            </div>
-            <div className="chat-placeholder">
-              <p>Select a channel to start chatting</p>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <h2>Welcome to AgentCrew</h2>
-            <p>Create a channel or agent to get started.</p>
-          </div>
-        )}
+        <ChatView />
       </main>
+
+      {/* Modals */}
+      {activeModal === 'createChannel' && <CreateChannelModal />}
+      {activeModal === 'channelMembers' && <ChannelMembersModal />}
     </div>
   )
 }
