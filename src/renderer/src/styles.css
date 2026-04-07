@@ -385,3 +385,76 @@ select.form-input {
   font-size: 13px;
   border-top: 1px solid var(--line-soft);
 }
+
+/* ── Agent Create Modal ────────────────────────────────── */
+
+.type-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.type-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.type-btn.active {
+  background: var(--text);
+  color: var(--panel);
+}
+
+.type-btn:not(.active):hover {
+  background: var(--bg-accent);
+}
+
+.advanced-toggle {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.advanced-toggle:hover {
+  color: var(--text);
+}
+
+.advanced-section {
+  padding-left: 12px;
+  border-left: 2px solid var(--line-soft);
+  margin-top: 8px;
+}
+
+.env-var-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+
+.add-link {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px 0;
+  font-weight: 600;
+}
+
+.add-link:hover {
+  text-decoration: underline;
+}

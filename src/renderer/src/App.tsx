@@ -3,6 +3,7 @@ import { useAppStore } from './store/app-store'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { ChatView } from './components/ChatView/ChatView'
 import { CreateChannelModal } from './components/Modals/CreateChannelModal'
+import { CreateAgentModal } from './components/Modals/CreateAgentModal'
 import { ChannelMembersModal } from './components/Modals/ChannelMembersModal'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
 
       {/* Modals */}
       {activeModal === 'createChannel' && <CreateChannelModal />}
+      {activeModal === 'createAgent' && <CreateAgentModal />}
       {activeModal === 'channelMembers' && <ChannelMembersModal />}
     </div>
   )
