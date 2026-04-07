@@ -5,6 +5,7 @@ import { ChatView } from './components/ChatView/ChatView'
 import { CreateChannelModal } from './components/Modals/CreateChannelModal'
 import { CreateAgentModal } from './components/Modals/CreateAgentModal'
 import { ChannelMembersModal } from './components/Modals/ChannelMembersModal'
+import { SettingsPage } from './components/Settings/SettingsPage'
 
 export default function App() {
   const initialized = useAppStore(s => s.initialized)
@@ -42,6 +43,7 @@ export default function App() {
       {activeModal === 'createChannel' && <CreateChannelModal />}
       {activeModal === 'createAgent' && <CreateAgentModal />}
       {activeModal === 'channelMembers' && <ChannelMembersModal />}
+      {activeModal === 'settings' && <SettingsPage />}
     </div>
   )
 }
