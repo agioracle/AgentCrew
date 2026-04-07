@@ -3,6 +3,7 @@ import type { AgentCrewRepository } from './database/repository'
 import type { PtyManager } from './pty-manager'
 import type { MessageDraft, AgentRecord } from '../shared/types'
 import { IPC } from '../shared/ipc-channels'
+import { ApiClient } from './api-client'
 import { homedir } from 'os'
 import { resolve } from 'path'
 
@@ -54,8 +55,9 @@ export class MessageRouter {
         const agent = this.ctx.repository.getAgent(agentId)
         if (agent.type === 'cli') {
           this.dispatchCli(agent, draft.channelId, draft.content)
+        } else if (agent.type === 'api') {
+          this.dispatchApi(agent, draft.channelId, draft.content)
         }
-        // API agent: Phase 7
       } catch (err) {
         this.postError(draft.channelId, agentId, err)
       }
@@ -119,6 +121,58 @@ export class MessageRouter {
       default:
         return [process.env.SHELL || '/bin/zsh', '-c', prompt]
     }
+  }
+
+  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string): void {
+    if (!agent.apiEndpoint || !agent.apiKey || !agent.model) {
+      this.postError(channelId, agent.id, new Error('API agent missing endpoint, key, or model configuration'))
+      return
+    }
+
+    this.ctx.repository.updateAgentStatus(agent.id, 'running')
+
+    // Build conversation context from recent channel messages
+    const recentMessages = this.ctx.repository.listMessages(channelId, 20)
+    const chatMessages = recentMessages.map(m => ({
+      role: (m.senderType === 'human' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content
+    }))
+
+    // Create a placeholder message that will be updated with streaming content
+    let fullResponse = ''
+    let replyMsgId: string | null = null
+
+    ApiClient.streamChat(
+      {
+        endpoint: agent.apiEndpoint,
+        apiKey: agent.apiKey,
+        model: agent.model,
+        systemPrompt: agent.systemPrompt ?? undefined
+      },
+      chatMessages,
+      // onChunk
+      (chunk) => {
+        fullResponse += chunk
+        // Stream partial updates to renderer
+        this.broadcast({ type: 'agent-stream-chunk', agentId: agent.id, channelId, chunk, fullText: fullResponse })
+      },
+      // onDone
+      (fullText) => {
+        const replyMsg = this.ctx.repository.createMessage({
+          channelId,
+          senderType: 'agent',
+          senderId: agent.id,
+          content: fullText || '(No response)',
+        })
+        this.broadcast(replyMsg)
+        this.ctx.repository.updateAgentStatus(agent.id, 'idle')
+      },
+      // onError
+      (err) => {
+        this.postError(channelId, agent.id, err)
+        this.ctx.repository.updateAgentStatus(agent.id, 'error')
+      }
+    )
   }
 
   private broadcast(msg: unknown): void {
