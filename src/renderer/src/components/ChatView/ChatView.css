@@ -256,3 +256,27 @@
 .checkbox-item input[type="checkbox"] {
   accent-color: var(--accent);
 }
+
+/* ── Terminal Panel ────────────────────────────────────── */
+
+.terminal-wrapper {
+  height: 250px;
+  border-top: var(--border-w) solid var(--line);
+  background: #0a1018;
+  position: relative;
+}
+
+.terminal-container {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+}
+
+.terminal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(244, 247, 251, 0.4);
+  font-size: 12px;
+}

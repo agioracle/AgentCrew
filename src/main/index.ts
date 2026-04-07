@@ -3,9 +3,16 @@ import { join } from 'path'
 import { createDatabase } from './database/db'
 import { AgentCrewRepository } from './database/repository'
 import { seedDefaultData } from './database/seed'
+import { PtyManager } from './pty-manager'
+import { MessageRouter } from './message-router'
 import { registerIpcHandlers } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
+let ptyManager: PtyManager | null = null
+
+function getMainWindow(): BrowserWindow | null {
+  return mainWindow
+}
 
 async function bootstrap(): Promise<void> {
   const userDataPath = app.getPath('userData')
@@ -19,8 +26,23 @@ async function bootstrap(): Promise<void> {
   const repository = new AgentCrewRepository(db)
   seedDefaultData(db)
 
+  // PTY Manager
+  ptyManager = new PtyManager()
+
+  // Message Router
+  const messageRouter = new MessageRouter({
+    repository,
+    ptyManager,
+    getMainWindow
+  })
+
   // IPC
-  registerIpcHandlers({ repository })
+  registerIpcHandlers({
+    repository,
+    ptyManager,
+    messageRouter,
+    getMainWindow
+  })
 
   // Window
   mainWindow = new BrowserWindow({
@@ -50,6 +72,7 @@ async function bootstrap(): Promise<void> {
 
   // Cleanup
   app.on('before-quit', () => {
+    ptyManager?.destroyAll()
     try { db.close() } catch { /* ignore */ }
   })
 }

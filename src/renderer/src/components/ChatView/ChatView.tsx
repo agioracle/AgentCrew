@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import { MessageTimeline } from './MessageTimeline'
 import { MessageInput } from './MessageInput'
+import { TerminalPanel } from './TerminalPanel'
 import { Terminal, Settings, Users } from 'lucide-react'
 import './ChatView.css'
 
@@ -14,12 +15,17 @@ export function ChatView() {
   const terminalOpen = useAppStore(s => s.terminalOpen)
   const toggleTerminal = useAppStore(s => s.toggleTerminal)
 
+  const agentPtyMap = useAppStore(s => s.agentPtyMap)
+
   const [tab, setTab] = useState<'chat' | 'agents'>('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const activeChannel = channels.find(ch => ch.id === activeChannelId)
   const channelAgents = agents.filter(a => activeChannel?.memberIds.includes(a.id))
   const hasCliAgent = channelAgents.some(a => a.type === 'cli')
+  const cliAgentPtyIds = channelAgents
+    .filter(a => a.type === 'cli' && agentPtyMap[a.id])
+    .map(a => ({ agentId: a.id, agentName: a.name, ptyId: agentPtyMap[a.id] }))
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -89,6 +95,17 @@ export function ChatView() {
             <MessageTimeline />
           </div>
           <MessageInput />
+          {terminalOpen && hasCliAgent && (
+            <div className="terminal-wrapper">
+              {cliAgentPtyIds.length > 0 ? (
+                <TerminalPanel ptyId={cliAgentPtyIds[0].ptyId} active={true} />
+              ) : (
+                <div className="terminal-empty">
+                  Agent terminal will appear here when a CLI agent is running
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <div className="agents-tab">

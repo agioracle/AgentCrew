@@ -37,6 +37,7 @@ export interface AppState {
   modalData: unknown
   settingsTab: 'account' | 'mcp' | 'skills'
   terminalOpen: boolean
+  agentPtyMap: Record<string, string> // agentId -> ptyId
   initialized: boolean
 
   // Actions
@@ -49,6 +50,7 @@ export interface AppState {
   closeModal: () => void
   setSettingsTab: (tab: 'account' | 'mcp' | 'skills') => void
   toggleTerminal: () => void
+  setAgentPty: (agentId: string, ptyId: string) => void
 
   // Agent actions
   createAgent: (draft: AgentDraft) => Promise<AgentRecord>
@@ -89,6 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   modalData: null,
   settingsTab: 'account',
   terminalOpen: false,
+  agentPtyMap: {},
   initialized: false,
 
   initialize: async () => {
@@ -131,6 +134,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeModal: () => set({ activeModal: null, modalData: null }),
   setSettingsTab: (tab) => set({ settingsTab: tab }),
   toggleTerminal: () => set(s => ({ terminalOpen: !s.terminalOpen })),
+  setAgentPty: (agentId, ptyId) => set(s => ({ agentPtyMap: { ...s.agentPtyMap, [agentId]: ptyId } })),
 
   // Agent
   createAgent: async (draft) => {
