@@ -95,18 +95,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialized: false,
 
   initialize: async () => {
-    const data = await window.api.bootstrap()
-    const activeChannelId = data.channels[0]?.id ?? null
-    set({
-      agents: data.agents,
-      channels: data.channels,
-      mcpServers: data.mcpServers,
-      skills: data.skills,
-      activeChannelId,
-      initialized: true
-    })
-    if (activeChannelId) {
-      get().loadMessages(activeChannelId)
+    try {
+      if (!window.api?.bootstrap) {
+        console.warn('[AgentCrew] window.api not available, running in browser preview mode')
+        set({ initialized: true })
+        return
+      }
+      const data = await window.api.bootstrap()
+      const activeChannelId = data.channels[0]?.id ?? null
+      set({
+        agents: data.agents,
+        channels: data.channels,
+        mcpServers: data.mcpServers,
+        skills: data.skills,
+        activeChannelId,
+        initialized: true
+      })
+      if (activeChannelId) {
+        get().loadMessages(activeChannelId)
+      }
+    } catch (err) {
+      console.error('[AgentCrew] Initialize failed:', err)
+      set({ initialized: true })
     }
   },
 

@@ -16,7 +16,11 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   const { repository, ptyManager, messageRouter, getMainWindow } = ctx
 
   // Bootstrap
-  ipcMain.handle(IPC.BOOTSTRAP, () => repository.getBootstrap())
+  ipcMain.handle(IPC.BOOTSTRAP, () => {
+    const data = repository.getBootstrap()
+    console.log('[IPC] bootstrap:', data.channels.length, 'channels,', data.agents.length, 'agents')
+    return data
+  })
 
   // Agents
   ipcMain.handle(IPC.AGENTS_LIST, () => repository.listAgents())

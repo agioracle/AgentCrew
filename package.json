@@ -12,25 +12,25 @@
     "postinstall": "node scripts/rebuild-native.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "^12.2.0",
-    "node-pty": "^1.1.0",
-    "@xterm/xterm": "^5.5.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "better-sqlite3": "^12.2.0",
+    "lucide-react": "^0.511.0",
+    "node-pty": "^1.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "zustand": "^5.0.5",
-    "lucide-react": "^0.511.0"
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
-    "electron": "^35.1.5",
-    "electron-vite": "^3.1.0",
     "@electron-toolkit/preload": "^3.0.1",
-    "@vitejs/plugin-react": "^4.5.2",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6"
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.5.2",
+    "electron": "^35.1.5",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
   }
 }

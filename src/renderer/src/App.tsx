@@ -18,6 +18,7 @@ export default function App() {
 
   // Subscribe to agent message stream
   useEffect(() => {
+    if (!window.api?.messages?.onStream) return
     const unsub = window.api.messages.onStream((msg) => {
       useAppStore.getState().appendMessage(msg)
     })
