@@ -1,0 +1,5 @@
+node_modules/
+out/
+dist/
+*.mv2
+.DS_Store
