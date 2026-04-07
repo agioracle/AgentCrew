@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import type { AgentCrewRepository } from './database/repository'
 import type { PtyManager } from './pty-manager'
+import type { MemoryService } from './memory-service'
 import type { MessageDraft, AgentRecord } from '../shared/types'
 import { IPC } from '../shared/ipc-channels'
 import { ApiClient } from './api-client'
@@ -30,6 +31,7 @@ function summarizeOutput(raw: string, maxLen = 800): string {
 export interface MessageRouterContext {
   repository: AgentCrewRepository
   ptyManager: PtyManager
+  memoryService: MemoryService
   getMainWindow: () => BrowserWindow | null
 }
 
@@ -64,9 +66,54 @@ export class MessageRouter {
     }
   }
 
+  private recallContext(agent: AgentRecord, channelId: string, prompt: string): string {
+    try {
+      const channel = this.ctx.repository.getChannel(channelId)
+      const recalls = this.ctx.memoryService.recall({
+        channelCapsuleId: channel.memoryCapsuleId ?? `channel-${channelId}`,
+        agentCapsuleId: agent.memoryCapsuleId ?? `agent-${agent.id}`,
+        agentId: agent.id,
+        query: prompt,
+      })
+      if (recalls.length === 0) return prompt
+      const memoryBlock = recalls.map(r => `[Memory/${r.scope}] ${r.content}`).join('\n')
+      return `<context>\n${memoryBlock}\n</context>\n\n${prompt}`
+    } catch (err) {
+      console.error('[Memory] recall failed:', err)
+      return prompt
+    }
+  }
+
+  private retainMemory(agent: AgentRecord, channelId: string, content: string): void {
+    try {
+      const channel = this.ctx.repository.getChannel(channelId)
+      // Retain to agent private capsule
+      this.ctx.memoryService.retain({
+        capsuleId: agent.memoryCapsuleId ?? `agent-${agent.id}`,
+        channelId,
+        content: content.slice(0, 500),
+        scope: 'agent',
+        agentId: agent.id,
+      })
+      // Retain to channel shared capsule
+      this.ctx.memoryService.retain({
+        capsuleId: channel.memoryCapsuleId ?? `channel-${channelId}`,
+        channelId,
+        content: content.slice(0, 500),
+        scope: 'shared',
+        agentId: agent.id,
+      })
+    } catch (err) {
+      console.error('[Memory] retain failed:', err)
+    }
+  }
+
   private dispatchCli(agent: AgentRecord, channelId: string, prompt: string): void {
     const win = this.ctx.getMainWindow()
     if (!win) return
+
+    // Enrich prompt with memory context
+    const enrichedPrompt = this.recallContext(agent, channelId, prompt)
 
     this.ctx.repository.updateAgentStatus(agent.id, 'running')
 
@@ -74,7 +121,7 @@ export class MessageRouter {
     const env: Record<string, string> = { ...agent.envVars }
 
     // Build command for the agent runtime
-    const command = this.buildCommand(agent, prompt)
+    const command = this.buildCommand(agent, enrichedPrompt)
 
     // Destroy old PTY if exists, create fresh one per task
     const oldPty = this.ctx.ptyManager.findByAgentId(agent.id)
@@ -101,6 +148,8 @@ export class MessageRouter {
       })
       this.broadcast(replyMsg)
       this.ctx.repository.updateAgentStatus(agent.id, exitCode === 0 ? 'idle' : 'error')
+      // Retain memory
+      this.retainMemory(agent, channelId, summary)
     })
   }
 
@@ -129,6 +178,9 @@ export class MessageRouter {
       return
     }
 
+    // Enrich prompt with memory context
+    const enrichedPrompt = this.recallContext(agent, channelId, prompt)
+
     this.ctx.repository.updateAgentStatus(agent.id, 'running')
 
     // Build conversation context from recent channel messages
@@ -137,6 +189,10 @@ export class MessageRouter {
       role: (m.senderType === 'human' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content
     }))
+    // Replace last user message with enriched version
+    if (chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user') {
+      chatMessages[chatMessages.length - 1].content = enrichedPrompt
+    }
 
     // Create a placeholder message that will be updated with streaming content
     let fullResponse = ''
@@ -166,6 +222,8 @@ export class MessageRouter {
         })
         this.broadcast(replyMsg)
         this.ctx.repository.updateAgentStatus(agent.id, 'idle')
+        // Retain memory
+        this.retainMemory(agent, channelId, fullText || '')
       },
       // onError
       (err) => {

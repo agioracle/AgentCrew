@@ -4,6 +4,7 @@ import { createDatabase } from './database/db'
 import { AgentCrewRepository } from './database/repository'
 import { seedDefaultData } from './database/seed'
 import { PtyManager } from './pty-manager'
+import { MemoryService } from './memory-service'
 import { MessageRouter } from './message-router'
 import { registerIpcHandlers } from './ipc'
 
@@ -29,10 +30,14 @@ async function bootstrap(): Promise<void> {
   // PTY Manager
   ptyManager = new PtyManager()
 
+  // Memory Service
+  const memoryService = new MemoryService()
+
   // Message Router
   const messageRouter = new MessageRouter({
     repository,
     ptyManager,
+    memoryService,
     getMainWindow
   })
 
