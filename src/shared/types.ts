@@ -3,7 +3,18 @@
 export type AgentType = 'cli' | 'api'
 export type AgentStatus = 'idle' | 'running' | 'error'
 export type SenderType = 'human' | 'agent'
-export type CliRuntime = 'claude-code' | 'codex' | 'gemini-cli' | 'opencode' | 'custom-cli'
+export type CliRuntime = 'claude-code' | 'codex' | 'gemini-cli' | 'custom-cli'
+
+// ─── CLI Detection ──────────────────────────────────────
+
+export interface CliRuntimeInfo {
+  runtime: CliRuntime
+  label: string
+  command: string
+  available: boolean
+  path: string | null
+  version: string | null
+}
 
 // ─── Agent ───────────────────────────────────────────────
 
@@ -14,6 +25,7 @@ export interface AgentRecord {
   type: AgentType
   // CLI fields
   runtime: CliRuntime | null
+  cliCommand: string | null
   model: string | null
   workingDir: string | null
   envVars: Record<string, string>
@@ -23,6 +35,7 @@ export interface AgentRecord {
   systemPrompt: string | null
   // Common
   memoryCapsuleId: string | null
+  icon: string
   status: AgentStatus
   createdAt: string
   updatedAt: string
@@ -33,12 +46,14 @@ export interface AgentDraft {
   description?: string | null
   type: AgentType
   runtime?: CliRuntime | null
+  cliCommand?: string | null
   model?: string | null
   workingDir?: string | null
   envVars?: Record<string, string>
   apiEndpoint?: string | null
   apiKey?: string | null
   systemPrompt?: string | null
+  icon?: string
 }
 
 // ─── Channel ─────────────────────────────────────────────
@@ -47,6 +62,8 @@ export interface ChannelRecord {
   id: string
   name: string
   description: string | null
+  isDm: boolean
+  workingDir: string | null
   memoryCapsuleId: string | null
   createdAt: string
   updatedAt: string
@@ -60,6 +77,8 @@ export interface ChannelWithMembers extends ChannelRecord {
 export interface ChannelDraft {
   name: string
   description?: string | null
+  isDm?: boolean
+  workingDir?: string | null
   memberIds?: string[]
 }
 

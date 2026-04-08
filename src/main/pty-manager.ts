@@ -12,6 +12,7 @@ interface PtyInstance {
   replayChars: number
   agentId: string
   onExitCallbacks: Array<(exitCode: number) => void>
+  onDataCallbacks: Array<(data: string) => void>
 }
 
 function appendReplayChunk(instance: PtyInstance, chunk: string): void {
@@ -34,7 +35,8 @@ export class PtyManager {
     agentId: string,
     shell?: string,
     command?: string[],
-    env?: Record<string, string>
+    env?: Record<string, string>,
+    initialWrite?: string
   ): string {
     const id = `pty-${++this.nextId}`
 
@@ -55,6 +57,15 @@ export class PtyManager {
       cwd: workingDir,
       env: {
         ...process.env,
+        // Ensure common binary paths are available (Electron may strip PATH)
+        PATH: [
+          '/opt/homebrew/bin',
+          '/opt/homebrew/sbin',
+          '/usr/local/bin',
+          `${process.env.HOME}/.local/bin`,
+          `${process.env.HOME}/.cargo/bin`,
+          process.env.PATH || '/usr/bin:/bin',
+        ].join(':'),
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
         ...env,
@@ -63,6 +74,8 @@ export class PtyManager {
       } as Record<string, string>
     })
 
+    console.log(`[PtyManager] Spawned ${id}: file=${file}, args=${args.length}, cwd=${workingDir}, pid=${proc.pid}`)
+
     const instance: PtyInstance = {
       process: proc,
       webContents,
@@ -70,20 +83,39 @@ export class PtyManager {
       replayChunks: [],
       replayChars: 0,
       agentId,
-      onExitCallbacks: []
+      onExitCallbacks: [],
+      onDataCallbacks: []
     }
 
+    // Write initial command on first output (shell is ready) — same pattern as Constellagent
+    let pendingWrite = initialWrite
     proc.onData((data) => {
       instance.outputSeq += data.length
       appendReplayChunk(instance, data)
       if (!instance.webContents.isDestroyed()) {
         instance.webContents.send(`${IPC.PTY_DATA}:${id}`, data)
       }
+      for (const cb of instance.onDataCallbacks) cb(data)
+      // Write initial command on first output (shell is ready)
+      if (pendingWrite) {
+        const toWrite = pendingWrite
+        pendingWrite = undefined
+        proc.write(toWrite)
+      }
     })
 
     proc.onExit(({ exitCode }) => {
-      for (const cb of instance.onExitCallbacks) cb(exitCode)
-      this.ptys.delete(id)
+      // Delay exit callback to allow final onData events to arrive
+      // (node-pty may fire onExit before all onData events are dispatched)
+      setTimeout(() => {
+        console.log(`[PtyManager] Exit ${id}: code=${exitCode}`)
+        for (const cb of instance.onExitCallbacks) cb(exitCode)
+        // Keep the instance in the map for a while so reattach/replay still works
+        // after the process exits (terminal panel may mount after exit)
+        setTimeout(() => {
+          this.ptys.delete(id)
+        }, 30_000)
+      }, 200)
     })
 
     this.ptys.set(id, instance)
@@ -108,6 +140,18 @@ export class PtyManager {
 
   onExit(ptyId: string, callback: (exitCode: number) => void): void {
     this.ptys.get(ptyId)?.onExitCallbacks.push(callback)
+  }
+
+  onData(ptyId: string, callback: (data: string) => void): void {
+    this.ptys.get(ptyId)?.onDataCallbacks.push(callback)
+  }
+
+  offData(ptyId: string, callback: (data: string) => void): void {
+    const instance = this.ptys.get(ptyId)
+    if (instance) {
+      const idx = instance.onDataCallbacks.indexOf(callback)
+      if (idx !== -1) instance.onDataCallbacks.splice(idx, 1)
+    }
   }
 
   reattach(ptyId: string, webContents: WebContents): { ok: boolean; replay?: string } {

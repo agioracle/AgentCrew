@@ -9,16 +9,18 @@ export function CreateChannelModal() {
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [workingDir, setWorkingDir] = useState('')
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || !workingDir.trim()) return
     setLoading(true)
     try {
       await createChannel({
         name: name.trim(),
         description: description.trim() || undefined,
+        workingDir: workingDir.trim(),
         memberIds: selectedAgents
       })
       closeModal()
@@ -63,6 +65,19 @@ export function CreateChannelModal() {
         </div>
 
         <div className="form-group">
+          <label className="form-label">WORKING DIRECTORY <span className="required">*</span></label>
+          <input
+            className="form-input"
+            placeholder="~/projects/my-app"
+            value={workingDir}
+            onChange={e => setWorkingDir(e.target.value)}
+          />
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+            All agents in this channel will operate within this directory.
+          </p>
+        </div>
+
+        <div className="form-group">
           <label className="form-label">MEMBERS <span className="optional">(optional)</span></label>
           {agents.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 12 }}>No agents available</p>
@@ -84,7 +99,7 @@ export function CreateChannelModal() {
 
         <div className="form-actions">
           <button className="btn btn-default" onClick={closeModal}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || loading}>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || !workingDir.trim() || loading}>
             Create Channel
           </button>
         </div>

@@ -8,14 +8,27 @@
 }
 
 .sidebar-brand {
-  padding: 16px 16px 12px;
+  padding: 36px 16px 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  -webkit-app-region: drag;
 }
 
 .brand-name {
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.3px;
+}
+
+.brand-slogan {
+  display: block;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 2px;
+  font-weight: 400;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-scroll {
@@ -102,6 +115,22 @@
 .status-dot.idle {
   background: var(--muted);
   opacity: 0.4;
+}
+
+.sidebar-item-action {
+  opacity: 0;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.sidebar-item:hover .sidebar-item-action {
+  opacity: 0.6;
+}
+
+.sidebar-item-action:hover {
+  opacity: 1 !important;
 }
 
 .icon-btn {

@@ -3,8 +3,6 @@ import type {
   AgentRecord, AgentDraft,
   ChannelWithMembers, ChannelDraft,
   MessageRecord, MessageDraft,
-  McpServerRecord, McpServerDraft,
-  SkillRecord, SkillDraft
 } from '@shared/types'
 
 declare global {
@@ -19,6 +17,7 @@ export type ModalType =
   | 'createChannel'
   | 'createAgent'
   | 'channelMembers'
+  | 'channelSettings'
   | 'agentDetail'
   | 'settings'
   | null
@@ -28,16 +27,16 @@ export interface AppState {
   agents: AgentRecord[]
   channels: ChannelWithMembers[]
   messages: MessageRecord[]
-  mcpServers: McpServerRecord[]
-  skills: SkillRecord[]
 
   // UI
   activeChannelId: string | null
   activeModal: ModalType
   modalData: unknown
-  settingsTab: 'account' | 'mcp' | 'skills'
+  userName: string
   terminalOpen: boolean
   agentPtyMap: Record<string, string> // agentId -> ptyId
+  activeTerminalAgentId: string | null
+  thinkingAgents: Record<string, string> // agentId -> thinking verb
   initialized: boolean
 
   // Actions
@@ -48,9 +47,11 @@ export interface AppState {
   setActiveChannel: (id: string) => void
   openModal: (modal: ModalType, data?: unknown) => void
   closeModal: () => void
-  setSettingsTab: (tab: 'account' | 'mcp' | 'skills') => void
+  setUserName: (name: string) => void
   toggleTerminal: () => void
   setAgentPty: (agentId: string, ptyId: string) => void
+  setActiveTerminalAgent: (agentId: string) => void
+  setAgentThinking: (agentId: string, verb: string | null) => void
 
   // Agent actions
   createAgent: (draft: AgentDraft) => Promise<AgentRecord>
@@ -66,16 +67,6 @@ export interface AppState {
   // Message actions
   sendMessage: (draft: MessageDraft) => Promise<MessageRecord>
   appendMessage: (msg: MessageRecord) => void
-
-  // MCP actions
-  createMcpServer: (draft: McpServerDraft) => Promise<void>
-  updateMcpServer: (id: string, draft: Partial<McpServerDraft>) => Promise<void>
-  deleteMcpServer: (id: string) => Promise<void>
-
-  // Skill actions
-  createSkill: (draft: SkillDraft) => Promise<void>
-  updateSkill: (id: string, draft: Partial<SkillDraft>) => Promise<void>
-  deleteSkill: (id: string) => Promise<void>
 }
 
 // ─── Store ───────────────────────────────────────────────
@@ -84,14 +75,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   agents: [],
   channels: [],
   messages: [],
-  mcpServers: [],
-  skills: [],
   activeChannelId: null,
   activeModal: null,
   modalData: null,
-  settingsTab: 'account',
+  userName: 'You',
   terminalOpen: false,
   agentPtyMap: {},
+  activeTerminalAgentId: null,
+  thinkingAgents: {},
   initialized: false,
 
   initialize: async () => {
@@ -106,8 +97,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         agents: data.agents,
         channels: data.channels,
-        mcpServers: data.mcpServers,
-        skills: data.skills,
         activeChannelId,
         initialized: true
       })
@@ -142,9 +131,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openModal: (modal, data) => set({ activeModal: modal, modalData: data ?? null }),
   closeModal: () => set({ activeModal: null, modalData: null }),
-  setSettingsTab: (tab) => set({ settingsTab: tab }),
+  setUserName: (name) => set({ userName: name }),
   toggleTerminal: () => set(s => ({ terminalOpen: !s.terminalOpen })),
   setAgentPty: (agentId, ptyId) => set(s => ({ agentPtyMap: { ...s.agentPtyMap, [agentId]: ptyId } })),
+  setActiveTerminalAgent: (agentId) => set({ activeTerminalAgentId: agentId }),
+  setAgentThinking: (agentId, verb) => set(s => {
+    if (verb === null) {
+      const { [agentId]: _, ...rest } = s.thinkingAgents
+      return { thinkingAgents: rest }
+    }
+    return { thinkingAgents: { ...s.thinkingAgents, [agentId]: verb } }
+  }),
 
   // Agent
   createAgent: async (draft) => {
@@ -191,9 +188,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Message
   sendMessage: async (draft) => {
-    const msg = await window.api.messages.create(draft)
-    set(s => ({ messages: [...s.messages, msg] }))
-    return msg
+    await window.api.messages.create(draft)
+    await get().loadMessages(draft.channelId)
+    return get().messages[get().messages.length - 1]
   },
   appendMessage: (msg) => {
     set(s => {
@@ -201,33 +198,5 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (s.messages.some(m => m.id === msg.id)) return s
       return { messages: [...s.messages, msg] }
     })
-  },
-
-  // MCP
-  createMcpServer: async (draft) => {
-    await window.api.mcp.create(draft)
-    set({ mcpServers: await window.api.mcp.list() })
-  },
-  updateMcpServer: async (id, draft) => {
-    await window.api.mcp.update(id, draft)
-    set({ mcpServers: await window.api.mcp.list() })
-  },
-  deleteMcpServer: async (id) => {
-    await window.api.mcp.delete(id)
-    set({ mcpServers: await window.api.mcp.list() })
-  },
-
-  // Skills
-  createSkill: async (draft) => {
-    await window.api.skills.create(draft)
-    set({ skills: await window.api.skills.list() })
-  },
-  updateSkill: async (id, draft) => {
-    await window.api.skills.update(id, draft)
-    set({ skills: await window.api.skills.list() })
-  },
-  deleteSkill: async (id) => {
-    await window.api.skills.delete(id)
-    set({ skills: await window.api.skills.list() })
   },
 }))

@@ -6,6 +6,7 @@ import { seedDefaultData } from './database/seed'
 import { PtyManager } from './pty-manager'
 import { MemoryService } from './memory-service'
 import { MessageRouter } from './message-router'
+import { CliDetector } from './cli-detector'
 import { registerIpcHandlers } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
@@ -33,6 +34,11 @@ async function bootstrap(): Promise<void> {
   // Memory Service
   const memoryService = new MemoryService()
 
+  // CLI Detector
+  const cliDetector = new CliDetector()
+  // Pre-warm cache in background
+  cliDetector.detectAll().catch(err => console.error('[CliDetector] Pre-warm failed:', err))
+
   // Message Router
   const messageRouter = new MessageRouter({
     repository,
@@ -46,6 +52,7 @@ async function bootstrap(): Promise<void> {
     repository,
     ptyManager,
     messageRouter,
+    cliDetector,
     getMainWindow
   })
 

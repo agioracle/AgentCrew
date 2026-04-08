@@ -4,9 +4,8 @@ import type {
   AgentRecord, AgentDraft,
   ChannelWithMembers, ChannelDraft,
   MessageRecord, MessageDraft,
-  McpServerRecord, McpServerDraft,
-  SkillRecord, SkillDraft,
-  BootstrapPayload
+  BootstrapPayload,
+  CliRuntimeInfo, CliRuntime
 } from '../shared/types'
 
 const api = {
@@ -55,26 +54,13 @@ const api = {
     },
   },
 
-  mcp: {
-    list: (): Promise<McpServerRecord[]> =>
-      ipcRenderer.invoke(IPC.MCP_LIST),
-    create: (draft: McpServerDraft): Promise<McpServerRecord> =>
-      ipcRenderer.invoke(IPC.MCP_CREATE, draft),
-    update: (id: string, draft: Partial<McpServerDraft>): Promise<McpServerRecord> =>
-      ipcRenderer.invoke(IPC.MCP_UPDATE, id, draft),
-    delete: (id: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.MCP_DELETE, id),
-  },
-
-  skills: {
-    list: (): Promise<SkillRecord[]> =>
-      ipcRenderer.invoke(IPC.SKILLS_LIST),
-    create: (draft: SkillDraft): Promise<SkillRecord> =>
-      ipcRenderer.invoke(IPC.SKILLS_CREATE, draft),
-    update: (id: string, draft: Partial<SkillDraft>): Promise<SkillRecord> =>
-      ipcRenderer.invoke(IPC.SKILLS_UPDATE, id, draft),
-    delete: (id: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.SKILLS_DELETE, id),
+  settings: {
+    get: (key: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.SETTINGS_GET, key),
+    set: (key: string, value: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),
+    delete: (key: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.SETTINGS_DELETE, key),
   },
 
   pty: {
@@ -96,6 +82,15 @@ const api = {
       ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId),
     list: (): Promise<string[]> =>
       ipcRenderer.invoke(IPC.PTY_LIST),
+  },
+
+  cli: {
+    detectAll: (): Promise<CliRuntimeInfo[]> =>
+      ipcRenderer.invoke(IPC.CLI_DETECT_ALL),
+    detect: (runtime: CliRuntime): Promise<CliRuntimeInfo> =>
+      ipcRenderer.invoke(IPC.CLI_DETECT, runtime),
+    startSession: (agentId: string, channelId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.CLI_START_SESSION, agentId, channelId),
   },
 }
 

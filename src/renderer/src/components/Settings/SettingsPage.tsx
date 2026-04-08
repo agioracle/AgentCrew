@@ -1,12 +1,55 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '../../store/app-store'
-import { X, Plus, Trash2 } from 'lucide-react'
+import { X, ChevronRight, ChevronDown } from 'lucide-react'
 import './Settings.css'
+
+const DEFAULT_SUMMARIZER_PROMPT = `You are a concise summarizer. Given raw CLI tool output, extract and present the raw information clearly. Remove any terminal noise, ANSI artifacts, or redundant content. Keep your summary brief and actionable.
+Only output the response text.
+Examples:
+1. if your summarized text is:
+"""
+Ran \`hi\`: Assistant greeted user ("Hi! How can I help you today?") and awaits input.
+"""
+Your output should be like:
+"""
+Hi! How can I help you today?
+"""
+
+2. if your summarized text is:
+"""
+User greeted the AI; AI responded with "Hi. What do you need help with?" User then requested "Explain this codebase". Status: gpt-5.4 high model active, 100% context remaining, working directory ~/Documents/agentspace/tmp.
+"""
+Your output should be like:
+"""
+Hi. What do you need help with?
+"""
+
+3. if your summarized text is:
+"""
+› hi
+• Hi. What do you need help with?
+› Use /skills to list available skills
+  gpt-5.4 high · 100% left · ~/Documents/agentspace/tmp
+"""
+Your output should be like:
+"""
+Hi. What do you need help with?
+"""
+
+4. if your summarized text is:
+"""
+User greeted the assistant with "hi". Assistant responded: "Hello. How can I help you today?"
+
+**Environment:** Gemini-3.1-Pro model | ~/.../agentspace/tmp | no sandbox | 7 MCP servers, 3 skills active | shortcuts available via ?
+"""
+Your output should be like:
+"""
+Hello. How can I help you today?
+"""`
 
 export function SettingsPage() {
   const closeModal = useAppStore(s => s.closeModal)
-  const settingsTab = useAppStore(s => s.settingsTab)
-  const setSettingsTab = useAppStore(s => s.setSettingsTab)
+  const [tab, setTab] = useState<'account' | 'summarizer'>('account')
 
   return (
     <div className="modal-overlay" onClick={closeModal}>
@@ -17,222 +60,163 @@ export function SettingsPage() {
         </div>
 
         <div className="tab-row" style={{ padding: 0, marginBottom: 16 }}>
-          <button className={`tab-btn ${settingsTab === 'account' ? 'active' : ''}`} onClick={() => setSettingsTab('account')}>
+          <button className={`tab-btn ${tab === 'account' ? 'active' : ''}`} onClick={() => setTab('account')}>
             ACCOUNT
           </button>
-          <button className={`tab-btn ${settingsTab === 'mcp' ? 'active' : ''}`} onClick={() => setSettingsTab('mcp')}>
-            MCP
-          </button>
-          <button className={`tab-btn ${settingsTab === 'skills' ? 'active' : ''}`} onClick={() => setSettingsTab('skills')}>
-            SKILLS
+          <button className={`tab-btn ${tab === 'summarizer' ? 'active' : ''}`} onClick={() => setTab('summarizer')}>
+            SUMMARIZER
           </button>
         </div>
 
-        {settingsTab === 'account' && <AccountTab />}
-        {settingsTab === 'mcp' && <McpTab />}
-        {settingsTab === 'skills' && <SkillsTab />}
+        {tab === 'account' && <AccountTab />}
+        {tab === 'summarizer' && <SummarizerTab />}
       </div>
     </div>
   )
 }
 
 function AccountTab() {
+  const userName = useAppStore(s => s.userName)
+  const setUserName = useAppStore(s => s.setUserName)
+  const [name, setName] = useState(userName)
+
+  const handleSave = () => {
+    const trimmed = name.trim() || 'You'
+    setUserName(trimmed)
+    setName(trimmed)
+  }
+
   return (
     <div>
-      <div className="form-group">
-        <label className="form-label">NAME</label>
-        <input className="form-input" defaultValue="user" />
-      </div>
       <div className="form-group">
         <label className="form-label">DISPLAY NAME</label>
-        <input className="form-input" defaultValue="user" />
+        <input className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="You" />
       </div>
-      <button className="btn btn-primary">Save Profile</button>
+      <button className="btn btn-primary" onClick={handleSave}>Save Profile</button>
     </div>
   )
 }
 
-function McpTab() {
-  const mcpServers = useAppStore(s => s.mcpServers)
-  const agents = useAppStore(s => s.agents)
-  const createMcpServer = useAppStore(s => s.createMcpServer)
-  const deleteMcpServer = useAppStore(s => s.deleteMcpServer)
-  const updateMcpServer = useAppStore(s => s.updateMcpServer)
+function SummarizerTab() {
+  const [endpoint, setEndpoint] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SUMMARIZER_PROMPT)
+  const [showPrompt, setShowPrompt] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saved, setSaved] = useState(false)
+  const [cleared, setCleared] = useState(false)
 
-  const [showAdd, setShowAdd] = useState(false)
-  const [name, setName] = useState('')
-  const [command, setCommand] = useState('')
-  const [envKey, setEnvKey] = useState('')
-  const [envVal, setEnvVal] = useState('')
+  useEffect(() => {
+    Promise.all([
+      window.api.settings.get('summarizer.endpoint'),
+      window.api.settings.get('summarizer.apiKey'),
+      window.api.settings.get('summarizer.model'),
+      window.api.settings.get('summarizer.systemPrompt'),
+    ]).then(([ep, key, mdl, sp]) => {
+      setEndpoint(ep ?? '')
+      setApiKey(key ?? '')
+      setModel(mdl ?? '')
+      setSystemPrompt(sp || DEFAULT_SUMMARIZER_PROMPT)
+      // If user has customized the prompt, expand the section
+      if (sp && sp !== DEFAULT_SUMMARIZER_PROMPT) setShowPrompt(true)
+      setLoading(false)
+    })
+  }, [])
 
-  const handleAdd = async () => {
-    if (!name.trim() || !command.trim()) return
-    const envVars: Record<string, string> = {}
-    if (envKey.trim()) envVars[envKey.trim()] = envVal
-    await createMcpServer({ name: name.trim(), command: command.trim(), envVars })
-    setName('')
-    setCommand('')
-    setEnvKey('')
-    setEnvVal('')
-    setShowAdd(false)
+  const handleSave = async () => {
+    setSaved(false)
+    setCleared(false)
+    const pairs: [string, string][] = [
+      ['summarizer.endpoint', endpoint.trim()],
+      ['summarizer.apiKey', apiKey.trim()],
+      ['summarizer.model', model.trim()],
+      ['summarizer.systemPrompt', systemPrompt.trim()],
+    ]
+    for (const [k, v] of pairs) {
+      if (v) {
+        await window.api.settings.set(k, v)
+      } else {
+        await window.api.settings.delete(k)
+      }
+    }
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
-  const toggleAgent = async (serverId: string, agentId: string, currentAllowed: string[]) => {
-    const newAllowed = currentAllowed.includes(agentId)
-      ? currentAllowed.filter(a => a !== agentId)
-      : [...currentAllowed, agentId]
-    await updateMcpServer(serverId, { allowedAgents: newAllowed })
+  const handleClear = async () => {
+    setSaved(false)
+    setCleared(false)
+    const keys = ['summarizer.endpoint', 'summarizer.apiKey', 'summarizer.model', 'summarizer.systemPrompt']
+    for (const k of keys) {
+      await window.api.settings.delete(k)
+    }
+    setEndpoint('')
+    setApiKey('')
+    setModel('')
+    setSystemPrompt(DEFAULT_SUMMARIZER_PROMPT)
+    setShowPrompt(false)
+    setCleared(true)
+    setTimeout(() => setCleared(false), 2000)
   }
+
+  if (loading) return <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading...</div>
 
   return (
     <div>
-      {mcpServers.map(server => (
-        <div key={server.id} className="settings-card">
-          <div className="card-header">
-            <strong>{server.name}</strong>
-            <button className="icon-btn" onClick={() => deleteMcpServer(server.id)}>
-              <Trash2 size={12} />
-            </button>
-          </div>
-          <div className="card-detail">{server.command}</div>
-          <div className="card-detail">
-            Agents: {server.allowedAgents.length === 0
-              ? 'All'
-              : agents.filter(a => server.allowedAgents.includes(a.id)).map(a => a.name).join(', ')
-            }
-          </div>
-          {agents.length > 0 && (
-            <div className="card-agents">
-              {agents.map(a => (
-                <label key={a.id} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={server.allowedAgents.length === 0 || server.allowedAgents.includes(a.id)}
-                    onChange={() => toggleAgent(server.id, a.id, server.allowedAgents)}
-                  />
-                  <span>{a.name}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+        Configure an LLM to summarize CLI agent output before displaying in chat.
+        If not configured, raw output (last 20 lines) will be shown instead.
+      </p>
 
-      {showAdd ? (
-        <div className="settings-card">
-          <div className="form-group">
-            <label className="form-label">NAME <span className="required">*</span></label>
-            <input className="form-input" placeholder="e.g. github" value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">COMMAND <span className="required">*</span></label>
-            <input className="form-input" placeholder="npx @mcp/server-github" value={command} onChange={e => setCommand(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">ENV VAR <span className="optional">(optional)</span></label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input className="form-input" placeholder="KEY" value={envKey} onChange={e => setEnvKey(e.target.value)} style={{ flex: 1 }} />
-              <input className="form-input" placeholder="VALUE" value={envVal} onChange={e => setEnvVal(e.target.value)} style={{ flex: 2 }} />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button className="btn btn-default" onClick={() => setShowAdd(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleAdd} disabled={!name.trim() || !command.trim()}>Add</button>
-          </div>
-        </div>
-      ) : (
-        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
-          <Plus size={14} /> Add MCP Server
+      <div className="form-group">
+        <label className="form-label">API ENDPOINT</label>
+        <input className="form-input" placeholder="https://api.openai.com/v1/chat/completions" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">API KEY</label>
+        <input className="form-input" type="password" placeholder="sk-..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">MODEL</label>
+        <input className="form-input" placeholder="gpt-4o-mini" value={model} onChange={e => setModel(e.target.value)} />
+      </div>
+
+      <div className="form-group">
+        <button
+          type="button"
+          onClick={() => setShowPrompt(!showPrompt)}
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)',
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+          }}
+        >
+          {showPrompt ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          SYSTEM PROMPT
+          <span style={{ fontWeight: 400, color: 'var(--muted)', textTransform: 'none' as const, letterSpacing: 0 }}>
+            — do not modify unless necessary
+          </span>
         </button>
-      )}
-    </div>
-  )
-}
+        {showPrompt && (
+          <textarea
+            className="form-input"
+            value={systemPrompt}
+            onChange={e => setSystemPrompt(e.target.value)}
+            rows={4}
+            style={{ marginTop: 8 }}
+          />
+        )}
+      </div>
 
-function SkillsTab() {
-  const skills = useAppStore(s => s.skills)
-  const agents = useAppStore(s => s.agents)
-  const createSkill = useAppStore(s => s.createSkill)
-  const deleteSkill = useAppStore(s => s.deleteSkill)
-  const updateSkill = useAppStore(s => s.updateSkill)
-
-  const [showAdd, setShowAdd] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [source, setSource] = useState('')
-
-  const handleAdd = async () => {
-    if (!name.trim() || !source.trim()) return
-    await createSkill({ name: name.trim(), description: description.trim() || undefined, source: source.trim() })
-    setName('')
-    setDescription('')
-    setSource('')
-    setShowAdd(false)
-  }
-
-  const toggleAgent = async (skillId: string, agentId: string, currentAllowed: string[]) => {
-    const newAllowed = currentAllowed.includes(agentId)
-      ? currentAllowed.filter(a => a !== agentId)
-      : [...currentAllowed, agentId]
-    await updateSkill(skillId, { allowedAgents: newAllowed })
-  }
-
-  return (
-    <div>
-      {skills.map(skill => (
-        <div key={skill.id} className="settings-card">
-          <div className="card-header">
-            <strong>{skill.name}</strong>
-            <button className="icon-btn" onClick={() => deleteSkill(skill.id)}>
-              <Trash2 size={12} />
-            </button>
-          </div>
-          {skill.description && <div className="card-detail">{skill.description}</div>}
-          <div className="card-detail">{skill.source}</div>
-          <div className="card-detail">
-            Agents: {skill.allowedAgents.length === 0 ? 'All' : agents.filter(a => skill.allowedAgents.includes(a.id)).map(a => a.name).join(', ')}
-          </div>
-          {agents.length > 0 && (
-            <div className="card-agents">
-              {agents.map(a => (
-                <label key={a.id} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={skill.allowedAgents.length === 0 || skill.allowedAgents.includes(a.id)}
-                    onChange={() => toggleAgent(skill.id, a.id, skill.allowedAgents)}
-                  />
-                  <span>{a.name}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {showAdd ? (
-        <div className="settings-card">
-          <div className="form-group">
-            <label className="form-label">NAME <span className="required">*</span></label>
-            <input className="form-input" placeholder="e.g. code-review" value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">DESCRIPTION <span className="optional">(optional)</span></label>
-            <input className="form-input" placeholder="What does this skill do?" value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">SOURCE <span className="required">*</span></label>
-            <input className="form-input" placeholder="~/.skills/code-review or https://..." value={source} onChange={e => setSource(e.target.value)} />
-          </div>
-          <div className="form-actions">
-            <button className="btn btn-default" onClick={() => setShowAdd(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleAdd} disabled={!name.trim() || !source.trim()}>Add</button>
-          </div>
-        </div>
-      ) : (
-        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
-          <Plus size={14} /> Add Skill
-        </button>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button className="btn btn-primary" onClick={handleSave}>Save</button>
+        <button className="btn btn-secondary" onClick={handleClear}>Clear</button>
+        {saved && <span style={{ fontSize: 12, color: 'var(--success)' }}>Saved!</span>}
+        {cleared && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Cleared!</span>}
+      </div>
     </div>
   )
 }

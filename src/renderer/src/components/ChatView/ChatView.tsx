@@ -16,6 +16,8 @@ export function ChatView() {
   const toggleTerminal = useAppStore(s => s.toggleTerminal)
 
   const agentPtyMap = useAppStore(s => s.agentPtyMap)
+  const activeTerminalAgentId = useAppStore(s => s.activeTerminalAgentId)
+  const setActiveTerminalAgent = useAppStore(s => s.setActiveTerminalAgent)
 
   const [tab, setTab] = useState<'chat' | 'agents'>('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -26,6 +28,13 @@ export function ChatView() {
   const cliAgentPtyIds = channelAgents
     .filter(a => a.type === 'cli' && agentPtyMap[a.id])
     .map(a => ({ agentId: a.id, agentName: a.name, ptyId: agentPtyMap[a.id] }))
+
+  const isDm = activeChannel?.isDm ?? false
+
+  // Reset tab to chat when switching to DM
+  useEffect(() => {
+    if (isDm && tab === 'agents') setTab('chat')
+  }, [isDm, activeChannelId])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -48,10 +57,13 @@ export function ChatView() {
       {/* Header */}
       <div className="channel-header">
         <div className="channel-title">
-          <span className="channel-hash">#</span>
+          <span className="channel-hash">{isDm ? '@' : '#'}</span>
           <span className="channel-name">{activeChannel.name}</span>
-          {activeChannel.description && (
+          {activeChannel.description && !isDm && (
             <span className="channel-desc"> — {activeChannel.description}</span>
+          )}
+          {activeChannel.workingDir && (
+            <span className="channel-workdir" title={activeChannel.workingDir}>{activeChannel.workingDir}</span>
           )}
         </div>
         <div className="header-actions">
@@ -64,29 +76,39 @@ export function ChatView() {
               <Terminal size={14} />
             </button>
           )}
-          <button className="icon-btn" title="Channel Settings">
-            <Settings size={14} />
-          </button>
-          <button
-            className="icon-btn"
-            onClick={() => openModal('channelMembers', activeChannel.id)}
-            title="Members"
-          >
-            <Users size={14} />
-            <span style={{ fontSize: 11, marginLeft: 2 }}>{activeChannel.memberIds.length + 1}</span>
-          </button>
+          {!isDm && (
+            <>
+              <button
+                className="icon-btn"
+                onClick={() => openModal('channelSettings', activeChannel.id)}
+                title="Channel Settings"
+              >
+                <Settings size={14} />
+              </button>
+              <button
+                className="icon-btn"
+                onClick={() => openModal('channelMembers', activeChannel.id)}
+                title="Members"
+              >
+                <Users size={14} />
+                <span style={{ fontSize: 11, marginLeft: 2 }}>{activeChannel.memberIds.length + 1}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="tab-row">
-        <button className={`tab-btn ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>
-          CHAT
-        </button>
-        <button className={`tab-btn ${tab === 'agents' ? 'active' : ''}`} onClick={() => setTab('agents')}>
-          AGENTS
-        </button>
-      </div>
+      {/* Tabs — only show for group channels */}
+      {!isDm && (
+        <div className="tab-row">
+          <button className={`tab-btn ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>
+            CHAT
+          </button>
+          <button className={`tab-btn ${tab === 'agents' ? 'active' : ''}`} onClick={() => setTab('agents')}>
+            AGENTS
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       {tab === 'chat' ? (
@@ -98,7 +120,30 @@ export function ChatView() {
           {terminalOpen && hasCliAgent && (
             <div className="terminal-wrapper">
               {cliAgentPtyIds.length > 0 ? (
-                <TerminalPanel ptyId={cliAgentPtyIds[0].ptyId} active={true} />
+                <>
+                  {/* Tab bar for multiple CLI agents */}
+                  {cliAgentPtyIds.length > 1 && (
+                    <div className="terminal-tabs">
+                      {cliAgentPtyIds.map(({ agentId, agentName }) => (
+                        <button
+                          key={agentId}
+                          className={`terminal-tab ${(activeTerminalAgentId ?? cliAgentPtyIds[0].agentId) === agentId ? 'active' : ''}`}
+                          onClick={() => setActiveTerminalAgent(agentId)}
+                        >
+                          {agentName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Terminal panels — all mounted, visibility controlled */}
+                  {cliAgentPtyIds.map(({ agentId, ptyId }) => (
+                    <TerminalPanel
+                      key={ptyId}
+                      ptyId={ptyId}
+                      active={(activeTerminalAgentId ?? cliAgentPtyIds[0].agentId) === agentId}
+                    />
+                  ))}
+                </>
               ) : (
                 <div className="terminal-empty">
                   Agent terminal will appear here when a CLI agent is running

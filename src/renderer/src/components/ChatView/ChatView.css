@@ -257,6 +257,38 @@
   accent-color: var(--accent);
 }
 
+/* ── Thinking Indicator ───────────────────────────────── */
+
+.thinking-bubble {
+  opacity: 0.7;
+}
+
+.thinking-content {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-style: italic;
+  color: var(--accent);
+}
+
+.thinking-verb {
+  font-weight: 500;
+}
+
+.thinking-dots span {
+  animation: thinking-dot 1.4s infinite;
+  opacity: 0;
+}
+
+.thinking-dots span:nth-child(1) { animation-delay: 0s; }
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes thinking-dot {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
+
 /* ── Terminal Panel ────────────────────────────────────── */
 
 .terminal-wrapper {
@@ -279,4 +311,33 @@
   height: 100%;
   color: rgba(244, 247, 251, 0.4);
   font-size: 12px;
+}
+
+.terminal-tabs {
+  display: flex;
+  height: 28px;
+  background: #0d1520;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.terminal-tab {
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.terminal-tab:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.terminal-tab.active {
+  color: #8ee8d8;
+  border-bottom-color: #8ee8d8;
 }

@@ -1,6 +1,7 @@
 import { useAppStore } from '../../store/app-store'
 import type { MessageRecord } from '@shared/types'
 import { User, Bot } from 'lucide-react'
+import { AgentIcon } from '../AgentIcon'
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
@@ -19,6 +20,7 @@ function formatDate(iso: string): string {
 
 export function MessageBubble({ message }: { message: MessageRecord }) {
   const agents = useAppStore(s => s.agents)
+  const userName = useAppStore(s => s.userName)
   const isHuman = message.senderType === 'human'
   const agent = !isHuman ? agents.find(a => a.id === message.senderId) : null
 
@@ -28,12 +30,12 @@ export function MessageBubble({ message }: { message: MessageRecord }) {
         {isHuman ? (
           <div className="avatar avatar-human"><User size={16} /></div>
         ) : (
-          <div className="avatar avatar-agent"><Bot size={16} /></div>
+          <div className="avatar avatar-agent"><AgentIcon icon={agent?.icon ?? 'bot'} size={16} /></div>
         )}
       </div>
       <div className="message-body">
         <div className="message-meta">
-          <span className="message-sender">{isHuman ? 'you' : (agent?.name ?? 'agent')}</span>
+          <span className="message-sender">{isHuman ? userName : (agent?.name ?? 'agent')}</span>
           <span className="message-role">{isHuman ? 'owner' : 'agent'}</span>
           <span className="message-time">{formatTime(message.createdAt)}</span>
         </div>
@@ -43,8 +45,32 @@ export function MessageBubble({ message }: { message: MessageRecord }) {
   )
 }
 
+function ThinkingIndicator({ agentName, agentIcon, verb }: { agentName: string; agentIcon: string; verb: string }) {
+  return (
+    <div className="message-bubble thinking-bubble">
+      <div className="message-avatar">
+        <div className="avatar avatar-agent"><AgentIcon icon={agentIcon} size={16} /></div>
+      </div>
+      <div className="message-body">
+        <div className="message-meta">
+          <span className="message-sender">{agentName}</span>
+          <span className="message-role">agent</span>
+        </div>
+        <div className="message-content thinking-content">
+          <span className="thinking-verb">{verb}</span>
+          <span className="thinking-dots">
+            <span>.</span><span>.</span><span>.</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function MessageTimeline() {
   const messages = useAppStore(s => s.messages)
+  const agents = useAppStore(s => s.agents)
+  const thinkingAgents = useAppStore(s => s.thinkingAgents)
 
   if (messages.length === 0) {
     return (
@@ -77,6 +103,18 @@ export function MessageTimeline() {
           <MessageBubble key={item.msg.id} message={item.msg} />
         )
       )}
+      {/* Thinking indicators for agents currently processing */}
+      {Object.entries(thinkingAgents).map(([agentId, verb]) => {
+        const agent = agents.find(a => a.id === agentId)
+        return (
+          <ThinkingIndicator
+            key={`thinking-${agentId}`}
+            agentName={agent?.name ?? 'agent'}
+            agentIcon={agent?.icon ?? 'bot'}
+            verb={verb}
+          />
+        )
+      })}
     </div>
   )
 }

@@ -1,9 +1,30 @@
 # AgentCrew 产品需求文档 (PRD)
 
 **产品名称:** AgentCrew
-**文档版本:** v1.2
+**文档版本:** v1.6
 **产品定位:** 轻量级本地多 Agent 协作桌面工具
 **产品目标:** 让个人开发者在一个窗口内管理多个独立运行的 AI Agent，通过 Channel 实现人（作为 Manager）与 Agent 之间的自然语言协作。
+
+**v1.5 → v1.6 变更摘要：**
+1. **[UI] Channel Settings 弹窗** — 点击群组 Channel 顶栏设置按钮打开 Channel Settings 弹窗，可编辑名称、描述、工作目录，可删除 Channel
+2. **[UI] Agent Detail 弹窗** — 侧边栏 Agent 项右侧新增齿轮按钮（hover 显示），点击打开 Agent Detail 弹窗，可查看和编辑 Agent 所有配置，可删除 Agent
+3. **[UI] DM 视图简化** — DM Channel 仅显示 CHAT（无 AGENTS 标签），顶栏隐藏设置按钮和成员按钮，标题前缀为 `@` 而非 `#`
+
+**v1.4 → v1.5 变更摘要：**
+1. **[核心] Direct Messages 分离** — 侧边栏新增 DIRECT MESSAGES 分区，与 Agent 的一对一对话独立于 CHANNELS 显示，类似 Slack 的 DM 模式
+2. **[核心] DM 使用 Agent 工作目录** — DM 中 Agent 使用其自身配置的工作目录，而非 Channel 工作目录
+3. **[数据] Channel isDm 字段** — channels 表新增 `is_dm` 布尔字段，区分群组 Channel 和 DM Channel
+
+**v1.3 → v1.4 变更摘要：**
+1. **[核心] Channel 工作目录** — 创建 Channel 时必须指定工作目录，Channel 内所有 Agent 统一在该目录下协作，实现多 Agent 同项目协同
+2. **[核心] 工作目录优先级** — Channel 工作目录优先于 Agent 自身工作目录，确保同一 Channel 内所有 Agent 操作同一项目
+
+**v1.2 → v1.3 变更摘要：**
+1. **[核心] CLI Runtime 自动检测** — 创建 CLI Agent 时自动检测本机已安装的 CLI 工具（Claude Code、Codex、Gemini CLI），未安装的置灰不可选
+2. **[核心] CLI 命令绝对路径** — 所有 CLI Agent（含 Custom CLI）必须指定命令的绝对路径，自动检测到的工具预填路径，用户可手动修改
+3. **[核心] Working Directory 必填** — CLI Agent 的工作目录为必填项，Agent 的启动、操作和产出限定在该目录内
+4. **[简化] 移除 opencode Runtime** — 仅保留 Claude Code、Codex、Gemini CLI 三个内建 Runtime + Custom CLI
+5. **[简化] 移除 CLI Agent Model 字段** — 不再单独配置模型，模型选择由 CLI 工具自身管理
 
 **v1.1 → v1.2 变更摘要：**
 1. **[核心] Agent 输出简洁化** — Agent 在 Channel 中的回复消息必须保持简洁摘要形式，不输出完整文件内容；文件操作仅展示文件路径和修改位置，完整内容通过终端面板查看
@@ -60,8 +81,13 @@ AgentCrew 中**人类用户是唯一的 Manager**。与 HiClaw 的 Manager Agent
 | `claude-code` | Anthropic Claude Code CLI |
 | `codex` | OpenAI Codex CLI |
 | `gemini-cli` | Google Gemini CLI |
-| `opencode` | opencode CLI |
 | `custom-cli` | 用户自定义命令行工具 |
+
+**CLI Runtime 自动检测：** 创建 CLI Agent 时，系统自动检测本机已安装的 CLI 工具（通过 `which` 命令解析绝对路径 + `--version` 获取版本号），检测结果缓存。Runtime 下拉列表中：已安装的工具显示版本号（如 `Claude Code (v1.2.3)`），未安装的工具置灰不可选。Custom CLI 始终可选。
+
+**CLI 命令绝对路径：** 选择 Runtime 后，系统自动填充检测到的命令绝对路径（如 `/usr/local/bin/claude`）到 CLI COMMAND PATH 字段，用户可以手动修改。Custom CLI 需用户手动填写。所有路径必须以 `/` 开头。
+
+**Working Directory（必填）：** CLI Agent 的工作目录为必填项。Agent 的 PTY 进程以该目录为 `cwd` 启动，同时系统在每次任务 prompt 中注入目录约束指令，确保 Agent 只在该目录内读写和操作文件。
 
 **技术实现：** 基于 xterm.js（前端终端渲染）+ node-pty（后端 PTY 进程管理），参考 Constellagent 的 `pty-manager.ts` 模式。
 
@@ -91,9 +117,9 @@ AgentCrew 中**人类用户是唯一的 Manager**。与 HiClaw 的 Manager Agent
 **CLI Agent 额外属性：**
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| runtime | * | CLI 工具类型 |
-| model | | AI 模型（取决于 runtime） |
-| workingDirectory | * | 工作目录 |
+| runtime | * | CLI 工具类型（`claude-code` / `codex` / `gemini-cli` / `custom-cli`） |
+| cliCommand | * | 命令绝对路径（如 `/usr/local/bin/claude`），自动检测预填或用户手动填写 |
+| workingDirectory | * | 工作目录，Agent 只能在此目录内操作 |
 | envVars | | 注入 PTY 的环境变量 |
 
 **API Agent 额外属性：**
@@ -110,19 +136,21 @@ AgentCrew 中**人类用户是唯一的 Manager**。与 HiClaw 的 Manager Agent
 
 ### 2.3 Channel
 
-一个消息空间，人类用户与一个或多个 Agent 共同参与。
+一个消息空间，人类用户与一个或多个 Agent 共同参与。每个 Channel 绑定一个本地工作目录，Channel 内所有 Agent 统一在该目录下操作，实现多 Agent 对同一项目的协作。
 
 **必要属性：**
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | name | * | Channel 名称 |
 | description | | 简短描述 |
+| isDm | 自动 | 是否为 DM Channel（`true` = 与单个 Agent 一对一，`false` = 群组） |
+| workingDir | *（群组） | 本地工作目录；群组 Channel 必填，DM Channel 自动使用 Agent 的工作目录 |
 | members | | 参与的 Agent 列表（人类默认参与所有 Channel） |
 | memoryCapsuleId | 自动 | 自动分配的 Memvid 共享记忆胶囊 ID |
 
-**Channel 类型（隐式，根据成员数自动区分）：**
-- **Agent DM**：只有一个 Agent — 人与单个 Agent 的一对一对话
-- **Group Channel**：多个 Agent — 人与多个 Agent 的群组协作
+**Channel 类型：**
+- **DM Channel（`isDm=true`）**：与单个 Agent 的一对一对话，点击侧边栏 Agent 自动创建。在侧边栏 DIRECT MESSAGES 分区显示。工作目录使用 Agent 自身配置的工作目录。
+- **Group Channel（`isDm=false`）**：多个 Agent 的群组协作，通过 Create Channel 弹窗手动创建。在侧边栏 CHANNELS 分区显示。工作目录在创建时指定，Channel 内所有 Agent 统一使用该目录。
 
 ### 2.4 MCP Server & Skills
 
@@ -237,9 +265,12 @@ coder: 好的，我来实现登录功能...（实时流式输出）
 
 **关键约束：Agent 不能自主 @其他 Agent。** 如果 Agent 回复中包含 `@other-agent` 文本，系统将其视为普通文本显示，不触发路由。任务调度权始终在人类手中。
 
-### 3.2 人与单个 Agent 对话（Agent DM）
+### 3.2 人与单个 Agent 对话（Direct Message）
 
-在只有一个 Agent 成员的 Channel 中，人类发送的消息默认发给该 Agent，无需 @mention。
+点击侧边栏 AGENTS 分区中的 Agent，自动创建（或复用）一个 DM Channel（`isDm=true`），在 DIRECT MESSAGES 分区显示。DM 中：
+- 人类发送的消息默认发给该 Agent，无需 @mention
+- Agent 使用其自身配置的工作目录
+- 对话历史和记忆独立于群组 Channel
 
 ### 3.3 Agent 并行运行
 
@@ -309,8 +340,8 @@ CREATE TABLE agents (
   description       TEXT,
   type              TEXT NOT NULL,                -- 'cli' | 'api'
   -- CLI Agent 字段
-  runtime           TEXT,                         -- 'claude-code' | 'codex' | 'gemini-cli' | 'opencode' | 'custom-cli'
-  model             TEXT,
+  runtime           TEXT,                         -- 'claude-code' | 'codex' | 'gemini-cli' | 'custom-cli'
+  cli_command       TEXT,                         -- 命令绝对路径，如 '/usr/local/bin/claude'
   working_dir       TEXT,
   env_vars          TEXT NOT NULL DEFAULT '{}',   -- JSON
   -- API Agent 字段
@@ -329,6 +360,8 @@ CREATE TABLE channels (
   id                TEXT PRIMARY KEY,
   name              TEXT NOT NULL,
   description       TEXT,
+  is_dm             INTEGER NOT NULL DEFAULT 0,   -- 0=群组 Channel, 1=DM Channel
+  working_dir       TEXT,                         -- 群组必填；DM 使用 Agent 工作目录
   memory_capsule_id TEXT,                         -- 自动生成：'channel-{id}'
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
@@ -413,13 +446,17 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 │  # all    │  │ @coder 请实现登录功能                      │    │
 │  # dev    │  │                                          │    │
 │           │  │ Coder  agent  Yesterday 10:09 AM         │    │
-│ AGENTS    │  │ 好的，我来实现登录功能...                   │    │
-│  ◉ Coder  │  │                                          │    │
-│  ○ Review │  └──────────────────────────────────────────┘    │
+│ DIRECT    │  │ 好的，我来实现登录功能...                   │    │
+│ MESSAGES  │  │                                          │    │
+│  ▪ Coder  │  └──────────────────────────────────────────┘    │
+│  ▪ Review │                                                  │
+│           │  ┌──────────────────────────────────────────┐    │
+│ AGENTS    │  │ Message #channel-name           [Send ▷] │    │
+│  ◉ Coder  │  └──────────────────────────────────────────┘    │
+│  ○ Review │                                                  │
 │           │                                                  │
-│ HUMANS    │  ┌──────────────────────────────────────────┐    │
-│  👤 you   │  │ Message #channel-name           [Send ▷] │    │
-│           │  └──────────────────────────────────────────┘    │
+│ HUMANS    │                                                  │
+│  👤 you   │                                                  │
 ├───────────┼──────────────────────────────────────────────────┤
 │ 👤 user ⚙│                                                  │
 └───────────┴──────────────────────────────────────────────────┘
@@ -427,33 +464,47 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 
 ### 5.3 侧边栏
 
-参考 Slock 设计图：
+参考 Slock 设计图，类似 Slack 的分区布局：
 
 - **顶部**：产品名称 "AgentCrew"
-- **CHANNELS 分组**：Channel 列表 + `[+]` 创建按钮
-- **AGENTS 分组**：Agent 列表 + `[+]` 创建按钮，名称旁显示运行状态（◉ running / ○ idle / ✕ error），CLI Agent 和 API Agent 使用不同图标区分
+- **CHANNELS 分组**：群组 Channel 列表（`isDm=false`）+ `[+]` 创建按钮
+- **DIRECT MESSAGES 分组**：DM Channel 列表（`isDm=true`），显示 Agent 名称和状态图标
+- **AGENTS 分组**：Agent 列表 + `[+]` 创建按钮，名称旁显示运行状态（◉ running / ○ idle / ✕ error），CLI Agent 和 API Agent 使用不同图标区分，每项右侧有 `[⚙]` 设置按钮（hover 显示）
 - **HUMANS 分组**：当前用户
 - **底部**：用户信息 + 设置齿轮图标
 
 **侧边栏交互：**
 - 点击 Channel → 主内容区切换到该 Channel 聊天视图
-- 点击 Agent → 主内容区切换到该 Agent 的 DM Channel（自动创建或复用）
+- 点击 DM → 主内容区切换到该 DM 聊天视图
+- 点击 Agent 名称 → 自动创建或复用该 Agent 的 DM Channel，切换到 DM 聊天视图
+- 点击 Agent `[⚙]` 按钮 → 打开 Agent Detail 弹窗
 - 点击 Human → 主内容区显示用户 Profile
 
 ### 5.4 主内容区
 
-#### Channel 聊天视图（CHAT 标签）
+#### 群组 Channel 视图
+
+**顶栏：** `# channel-name — description [workingDir]` + 右侧工具按钮（终端图标、设置图标 `[⚙]`、成员数图标 `[👥]`）
+- 点击 `[⚙]` → 打开 Channel Settings 弹窗（编辑名称、描述、工作目录）
+- 点击 `[👥]` → 打开 Members 弹窗（添加/移除 Agent、删除 Channel）
+
+**标签栏：** CHAT | AGENTS
+- **CHAT**：消息时间线 + 输入区 + 终端面板
+- **AGENTS**：Channel 成员列表（HUMANS + AGENTS），`[+ Add Agent]` 按钮
+
+#### DM Channel 视图
+
+**顶栏：** `@ agent-name` + 终端图标（仅 CLI Agent）
+- **不显示** 设置按钮和成员按钮
+- **不显示** 标签栏（仅 CHAT 视图，无 AGENTS 标签）
+
+**内容：** 消息时间线 + 输入区 + 终端面板（CLI Agent）
+
+#### 消息时间线
 
 参考 Slock 的 `channel-chat.png`：
-- **顶栏**：`# channel-name — description` + 右侧工具按钮（终端图标 — 仅当 Channel 含 CLI Agent 时显示、设置图标、成员数图标）
-- **消息时间线**：每条消息显示 头像 + 发送者名称 + 角色标签（owner/agent）+ 时间 + 消息正文
-- **输入区**：底部输入框 + `[Send ▷]` 按钮；输入 `@` 触发 Agent 名称自动补全
-
-#### Channel 成员视图（AGENTS 标签）
-
-- HUMANS 分组 + AGENTS 分组
-- 每个 Agent 显示名称 + 类型标签（CLI/API）+ 运行状态
-- `[+ Add Agent]` 和 `[Delete Channel]` 按钮
+- 每条消息显示 头像 + 发送者名称 + 角色标签（owner/agent）+ 时间 + 消息正文
+- 底部输入框 + `[Send ▷]` 按钮；输入 `@` 触发 Agent 名称自动补全
 
 #### 嵌入式终端面板
 
@@ -465,7 +516,7 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 
 #### Create Agent 弹窗
 
-根据选择的 Agent 类型动态切换表单字段：
+根据选择的 Agent 类型动态切换表单字段。CLI 模式下 Runtime 下拉列表自动检测本机已安装的 CLI 工具：
 
 ```
 ┌──────────────────────────────────────┐
@@ -487,20 +538,27 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 │  └────────────┘ └──────────────┘     │
 │                                      │
 │  ── CLI Tool 模式 ──                  │
-│  RUNTIME *                           │
+│  RUNTIME *                detecting..│
 │  ┌──────────────────────────────────┐│
-│  │ claude-code                   ▼  ││
+│  │ Select a runtime...           ▼  ││
+│  │──────────────────────────────────││
+│  │ Claude Code (v1.2.3)            ││
+│  │ Codex (not installed)      [灰]  ││
+│  │ Gemini CLI (v2.0.1)            ││
+│  │ Custom CLI                      ││
 │  └──────────────────────────────────┘│
 │                                      │
-│  MODEL                               │
+│  CLI COMMAND PATH *                  │
 │  ┌──────────────────────────────────┐│
-│  │ opus                          ▼  ││
+│  │ /usr/local/bin/claude   (预填)    ││
 │  └──────────────────────────────────┘│
 │                                      │
 │  WORKING DIRECTORY *                 │
 │  ┌──────────────────────────────────┐│
 │  │ ~/projects/my-app                ││
 │  └──────────────────────────────────┘│
+│  Agent will only operate within      │
+│  this directory.                     │
 │                                      │
 │  ── 或 API Model 模式 ──             │
 │  API ENDPOINT *                      │
@@ -537,11 +595,17 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 └──────────────────────────────────────┘
 ```
 
-**说明：** TYPE 选择 "CLI Tool" 时显示 RUNTIME / MODEL / WORKING DIRECTORY 字段；选择 "API Model" 时显示 API ENDPOINT / API KEY / MODEL / SYSTEM PROMPT 字段。ADVANCED 区域包含环境变量、MCP Servers 授权勾选、Skills 授权勾选。
+**说明：**
+- TYPE 选择 "CLI Tool" 时显示 RUNTIME / CLI COMMAND PATH / WORKING DIRECTORY 字段；选择 "API Model" 时显示 API ENDPOINT / API KEY / MODEL / SYSTEM PROMPT 字段
+- RUNTIME 下拉列表默认为空（`Select a runtime...`），已安装工具显示版本号，未安装置灰不可选
+- 选择 Runtime 后自动预填 CLI COMMAND PATH（检测到的绝对路径），用户可手动修改
+- Custom CLI 选中后 CLI COMMAND PATH 为空，需用户手动填写绝对路径
+- WORKING DIRECTORY 为必填项，Agent 只能在该目录内操作
+- ADVANCED 区域包含环境变量、MCP Servers 授权勾选、Skills 授权勾选
 
 #### Create Channel 弹窗
 
-参考 Slock 的 `create-channel.png`，保持一致：
+参考 Slock 的 `create-channel.png`，新增工作目录必填字段：
 
 ```
 ┌──────────────────────────────────────┐
@@ -557,6 +621,13 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 │  │ What is this channel about?      ││
 │  └──────────────────────────────────┘│
 │                                      │
+│  WORKING DIRECTORY *                 │
+│  ┌──────────────────────────────────┐│
+│  │ ~/projects/my-app                ││
+│  └──────────────────────────────────┘│
+│  All agents in this channel will     │
+│  operate within this directory.      │
+│                                      │
 │  MEMBERS (optional)                  │
 │  [Select agents to add...]           │
 │                                      │
@@ -566,37 +637,81 @@ CREATE INDEX idx_messages_channel ON messages (channel_id, created_at);
 
 #### Agent Detail / Edit 弹窗
 
-点击 Agent 设置图标或在侧边栏右键 Agent 时弹出，显示 Agent 完整信息并支持编辑：
+点击侧边栏 Agent 项的 `[⚙]` 按钮时弹出，显示 Agent 完整信息并支持编辑：
 
 ```
 ┌──────────────────────────────────────┐
 │  AGENT: Coder                     [X]│
 │                                      │
-│  ┌──────┐ ┌───────┐ ┌──────────┐    │
-│  │ INFO │ │  MCP  │ │  SKILLS  │    │
-│  └──────┘ └───────┘ └──────────┘    │
+│  [CLI] ◉ running / claude-code       │
 │                                      │
-│  [INFO 标签]                          │
-│  Name: Coder                         │
-│  Type: CLI Tool                      │
-│  Runtime: claude-code                │
-│  Model: opus                         │
-│  Working Dir: ~/projects/my-app      │
-│  Status: ◉ running                   │
-│  Memory: 12 entries (agent-xxx.mv2)  │
+│  NAME *                              │
+│  ┌──────────────────────────────────┐│
+│  │ Coder                            ││
+│  └──────────────────────────────────┘│
 │                                      │
-│  [MCP 标签]                           │
-│  ☑ github       (全局共享)            │
-│  ☑ filesystem   (全局共享)            │
-│  ☐ database     (未授权)              │
-│  [+ Add MCP Server]                  │
+│  DESCRIPTION (optional)              │
+│  ┌──────────────────────────────────┐│
+│  │ Main coding agent                ││
+│  └──────────────────────────────────┘│
 │                                      │
-│  [SKILLS 标签]                        │
-│  ☑ code-review  (全局共享)            │
-│  ☐ doc-gen      (未授权)              │
-│  [+ Add Skill]                       │
+│  ── CLI Agent ──                      │
+│  RUNTIME                             │
+│  ┌──────────────────────────────────┐│
+│  │ Claude Code                   ▼  ││
+│  └──────────────────────────────────┘│
 │                                      │
-│       [Delete Agent]  [Save]         │
+│  CLI COMMAND PATH                    │
+│  ┌──────────────────────────────────┐│
+│  │ /usr/local/bin/claude            ││
+│  └──────────────────────────────────┘│
+│                                      │
+│  WORKING DIRECTORY                   │
+│  ┌──────────────────────────────────┐│
+│  │ ~/projects/my-app                ││
+│  └──────────────────────────────────┘│
+│  Used in DM conversations. Group     │
+│  channels override with their own.   │
+│                                      │
+│  ── 或 API Agent ──                   │
+│  (API ENDPOINT / API KEY / MODEL /   │
+│   SYSTEM PROMPT 字段)                 │
+│                                      │
+│  [Delete Agent]       [Cancel] [Save]│
+└──────────────────────────────────────┘
+```
+
+#### Channel Settings 弹窗
+
+点击群组 Channel 顶栏 `[⚙]` 设置按钮时弹出，可编辑 Channel 配置：
+
+```
+┌──────────────────────────────────────┐
+│  CHANNEL SETTINGS                 [X]│
+│                                      │
+│  NAME *                              │
+│  ┌──────────────────────────────────┐│
+│  │ dev                              ││
+│  └──────────────────────────────────┘│
+│                                      │
+│  DESCRIPTION (optional)              │
+│  ┌──────────────────────────────────┐│
+│  │ Development channel              ││
+│  └──────────────────────────────────┘│
+│                                      │
+│  WORKING DIRECTORY                   │
+│  ┌──────────────────────────────────┐│
+│  │ ~/projects/my-app                ││
+│  └──────────────────────────────────┘│
+│  All agents in this channel will     │
+│  operate within this directory.      │
+│                                      │
+│  INFO                                │
+│  Type: Group Channel                 │
+│  Members: 2 agents + you             │
+│  Messages: 42                        │
+│                                      │
+│  [Delete]             [Cancel] [Save]│
 └──────────────────────────────────────┘
 ```
 
@@ -680,12 +795,12 @@ Renderer (React)
 ├── App.tsx              — 二栏主布局
 ├── store/app-store.ts   — Zustand 全局状态
 └── components/
-    ├── Sidebar/         — 侧边栏（Channels, Agents, Humans）
-    ├── ChatView/        — Channel 聊天 + 嵌入式终端面板
+    ├── Sidebar/         — 侧边栏（Channels, DMs, Agents, Humans）
+    ├── ChatView/        — Channel/DM 聊天 + 嵌入式终端面板
     ├── AgentList/       — Channel 内 Agent 成员视图
     ├── Profile/         — 用户 Profile 页
     ├── Settings/        — 设置页（Account / MCP / Skills）
-    └── Modals/          — Create Agent / Create Channel / Agent Detail / Members
+    └── Modals/          — Create Agent / Create Channel / Agent Detail / Channel Settings / Members
 ```
 
 ### 6.3 消息路由机制
@@ -697,8 +812,8 @@ Renderer (React)
 2. message-service 解析 @mentions
 3. 对每个被 @mention 的 Agent:
    a. 从 Memory 召回相关记忆（Agent 私有 + Channel 共享）
-   b. 注入记忆上下文 + Channel 近期消息作为输入
-   c. [CLI Agent] 启动/复用 PTY → 写入 stdin → 流式输出到 Channel
+   b. 注入记忆上下文 + Working Directory 约束（DM 用 Agent 工作目录，群组用 Channel 工作目录）+ Channel 近期消息作为输入
+   c. [CLI Agent] 启动/复用 PTY（cwd=resolved workingDir）→ 写入 stdin → 流式输出到 Channel
       [API Agent] 构建 API 请求 → 发起 HTTP 调用 → 流式回复写入 Channel
    d. 回复完成后，写入记忆（Agent 私有 + Channel 共享）
 4. 若无 @mention 且 Channel 只有一个 Agent 成员，默认发给该 Agent

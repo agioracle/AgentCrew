@@ -27,6 +27,7 @@ function mapAgent(row: Record<string, unknown>): AgentRecord {
     description: (row.description as string | null) ?? null,
     type: row.type as AgentRecord['type'],
     runtime: (row.runtime as AgentRecord['runtime']) ?? null,
+    cliCommand: (row.cli_command as string | null) ?? null,
     model: (row.model as string | null) ?? null,
     workingDir: (row.working_dir as string | null) ?? null,
     envVars: parseJson(row.env_vars as string, {}),
@@ -34,6 +35,7 @@ function mapAgent(row: Record<string, unknown>): AgentRecord {
     apiKey: (row.api_key as string | null) ?? null,
     systemPrompt: (row.system_prompt as string | null) ?? null,
     memoryCapsuleId: (row.memory_capsule_id as string | null) ?? null,
+    icon: (row.icon as string | null) ?? 'bot',
     status: row.status as AgentRecord['status'],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
@@ -45,6 +47,8 @@ function mapChannel(row: Record<string, unknown>): ChannelRecord {
     id: row.id as string,
     name: row.name as string,
     description: (row.description as string | null) ?? null,
+    isDm: (row.is_dm as number) === 1,
+    workingDir: (row.working_dir as string | null) ?? null,
     memoryCapsuleId: (row.memory_capsule_id as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
@@ -118,14 +122,15 @@ export class AgentCrewRepository {
     const id = randomUUID()
     const ts = now()
     this.db.prepare(`
-      INSERT INTO agents (id, name, description, type, runtime, model, working_dir, env_vars, api_endpoint, api_key, system_prompt, memory_capsule_id, status, created_at, updated_at)
-      VALUES (@id, @name, @description, @type, @runtime, @model, @working_dir, @env_vars, @api_endpoint, @api_key, @system_prompt, @memory_capsule_id, 'idle', @created_at, @updated_at)
+      INSERT INTO agents (id, name, description, type, runtime, cli_command, model, working_dir, env_vars, api_endpoint, api_key, system_prompt, memory_capsule_id, icon, status, created_at, updated_at)
+      VALUES (@id, @name, @description, @type, @runtime, @cli_command, @model, @working_dir, @env_vars, @api_endpoint, @api_key, @system_prompt, @memory_capsule_id, @icon, 'idle', @created_at, @updated_at)
     `).run({
       id,
       name: draft.name,
       description: draft.description ?? null,
       type: draft.type,
       runtime: draft.runtime ?? null,
+      cli_command: draft.cliCommand ?? null,
       model: draft.model ?? null,
       working_dir: draft.workingDir ?? null,
       env_vars: JSON.stringify(draft.envVars ?? {}),
@@ -133,6 +138,7 @@ export class AgentCrewRepository {
       api_key: draft.apiKey ?? null,
       system_prompt: draft.systemPrompt ?? null,
       memory_capsule_id: `agent-${id}`,
+      icon: draft.icon ?? 'bot',
       created_at: ts,
       updated_at: ts
     })
@@ -145,9 +151,9 @@ export class AgentCrewRepository {
     this.db.prepare(`
       UPDATE agents SET
         name = @name, description = @description, type = @type, runtime = @runtime,
-        model = @model, working_dir = @working_dir, env_vars = @env_vars,
+        cli_command = @cli_command, model = @model, working_dir = @working_dir, env_vars = @env_vars,
         api_endpoint = @api_endpoint, api_key = @api_key, system_prompt = @system_prompt,
-        updated_at = @updated_at
+        icon = @icon, updated_at = @updated_at
       WHERE id = @id
     `).run({
       id,
@@ -155,12 +161,14 @@ export class AgentCrewRepository {
       description: draft.description !== undefined ? draft.description : existing.description,
       type: draft.type ?? existing.type,
       runtime: draft.runtime !== undefined ? draft.runtime : existing.runtime,
+      cli_command: draft.cliCommand !== undefined ? draft.cliCommand : existing.cliCommand,
       model: draft.model !== undefined ? draft.model : existing.model,
       working_dir: draft.workingDir !== undefined ? draft.workingDir : existing.workingDir,
       env_vars: draft.envVars ? JSON.stringify(draft.envVars) : JSON.stringify(existing.envVars),
       api_endpoint: draft.apiEndpoint !== undefined ? draft.apiEndpoint : existing.apiEndpoint,
       api_key: draft.apiKey !== undefined ? draft.apiKey : existing.apiKey,
       system_prompt: draft.systemPrompt !== undefined ? draft.systemPrompt : existing.systemPrompt,
+      icon: draft.icon !== undefined ? draft.icon : existing.icon,
       updated_at: ts
     })
     return this.getAgent(id)
@@ -205,12 +213,14 @@ export class AgentCrewRepository {
     const id = randomUUID()
     const ts = now()
     this.db.prepare(`
-      INSERT INTO channels (id, name, description, memory_capsule_id, created_at, updated_at)
-      VALUES (@id, @name, @description, @memory_capsule_id, @created_at, @updated_at)
+      INSERT INTO channels (id, name, description, is_dm, working_dir, memory_capsule_id, created_at, updated_at)
+      VALUES (@id, @name, @description, @is_dm, @working_dir, @memory_capsule_id, @created_at, @updated_at)
     `).run({
       id,
       name: draft.name,
       description: draft.description ?? null,
+      is_dm: draft.isDm ? 1 : 0,
+      working_dir: draft.workingDir ?? null,
       memory_capsule_id: `channel-${id}`,
       created_at: ts,
       updated_at: ts
@@ -228,11 +238,12 @@ export class AgentCrewRepository {
     const existing = this.getChannel(id)
     const ts = now()
     this.db.prepare(`
-      UPDATE channels SET name = @name, description = @description, updated_at = @updated_at WHERE id = @id
+      UPDATE channels SET name = @name, description = @description, working_dir = @working_dir, updated_at = @updated_at WHERE id = @id
     `).run({
       id,
       name: draft.name ?? existing.name,
       description: draft.description !== undefined ? draft.description : existing.description,
+      working_dir: draft.workingDir !== undefined ? draft.workingDir : existing.workingDir,
       updated_at: ts
     })
     return this.getChannel(id)
@@ -358,5 +369,20 @@ export class AgentCrewRepository {
 
   deleteSkill(id: string): void {
     this.db.prepare('DELETE FROM skills WHERE id = ?').run(id)
+  }
+
+  // ─── Settings ──────────────────────────────────────────
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
+    return row?.value ?? null
+  }
+
+  setSetting(key: string, value: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
+  }
+
+  deleteSetting(key: string): void {
+    this.db.prepare('DELETE FROM settings WHERE key = ?').run(key)
   }
 }

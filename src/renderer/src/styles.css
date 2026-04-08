@@ -99,6 +99,23 @@ body {
   font-size: 12px;
 }
 
+.channel-workdir {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  background: var(--panel-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 .header-actions {
   display: flex;
   gap: 6px;
@@ -197,6 +214,41 @@ body {
 
 .form-group {
   margin-bottom: 16px;
+}
+
+/* ── Icon Picker ──────────────────────────────────────── */
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.icon-picker-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text);
+  opacity: 0.5;
+  transition: all 0.1s;
+}
+
+.icon-picker-item:hover {
+  opacity: 0.8;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.icon-picker-item.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgba(232, 25, 108, 0.1);
+  color: var(--accent);
 }
 
 .form-label {
@@ -457,4 +509,19 @@ select.form-input {
 
 .add-link:hover {
   text-decoration: underline;
+}
+
+/* Runtime detection */
+.form-input.input-error {
+  border-color: var(--danger);
+}
+
+.form-error {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+select.form-input option:disabled {
+  color: #aaa;
 }

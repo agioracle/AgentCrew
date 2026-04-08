@@ -47,4 +47,14 @@ export const IPC = {
   // Memory
   MEMORY_STATUS: 'memory:status',
   MEMORY_RECALL: 'memory:recall',
+
+  // CLI Detection
+  CLI_DETECT_ALL: 'cli:detect-all',
+  CLI_DETECT: 'cli:detect',
+  CLI_START_SESSION: 'cli:start-session',
+
+  // Settings
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set',
+  SETTINGS_DELETE: 'settings:delete',
 } as const

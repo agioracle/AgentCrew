@@ -44,8 +44,15 @@ export class ApiClient {
     }
     allMessages.push(...messages)
 
-    const url = new URL(endpoint.endsWith('/') ? endpoint : endpoint + '/')
-    const chatUrl = new URL('chat/completions', url)
+    // If the endpoint already includes /chat/completions, use it directly.
+    // Otherwise treat it as a base URL and append /chat/completions.
+    let chatUrl: URL
+    if (endpoint.includes('/chat/completions')) {
+      chatUrl = new URL(endpoint)
+    } else {
+      const url = new URL(endpoint.endsWith('/') ? endpoint : endpoint + '/')
+      chatUrl = new URL('chat/completions', url)
+    }
 
     const body = JSON.stringify({
       model,
@@ -75,6 +82,13 @@ export class ApiClient {
 
       let fullText = ''
       let buffer = ''
+      let done = false
+
+      const finalize = () => {
+        if (done) return
+        done = true
+        onDone(fullText)
+      }
 
       res.on('data', (chunk: Buffer) => {
         buffer += chunk.toString()
@@ -86,7 +100,7 @@ export class ApiClient {
           if (!trimmed || !trimmed.startsWith('data: ')) continue
           const data = trimmed.slice(6)
           if (data === '[DONE]') {
-            onDone(fullText)
+            finalize()
             return
           }
 
@@ -103,7 +117,7 @@ export class ApiClient {
               onChunk(delta)
             }
             if (parsed.choices?.[0]?.finish_reason === 'stop') {
-              onDone(fullText)
+              finalize()
             }
           } catch {
             // Skip malformed JSON
@@ -113,7 +127,7 @@ export class ApiClient {
 
       res.on('end', () => {
         if (fullText) {
-          onDone(fullText)
+          finalize()
         }
       })
 

@@ -3,17 +3,19 @@ import { IPC } from '../shared/ipc-channels'
 import type { AgentCrewRepository } from './database/repository'
 import type { PtyManager } from './pty-manager'
 import type { MessageRouter } from './message-router'
-import type { AgentDraft, ChannelDraft, MessageDraft, McpServerDraft, SkillDraft } from '../shared/types'
+import type { CliDetector } from './cli-detector'
+import type { AgentDraft, ChannelDraft, MessageDraft, McpServerDraft, SkillDraft, CliRuntime } from '../shared/types'
 
 export interface IpcContext {
   repository: AgentCrewRepository
   ptyManager: PtyManager
   messageRouter: MessageRouter
+  cliDetector: CliDetector
   getMainWindow: () => import('electron').BrowserWindow | null
 }
 
 export function registerIpcHandlers(ctx: IpcContext): void {
-  const { repository, ptyManager, messageRouter, getMainWindow } = ctx
+  const { repository, ptyManager, messageRouter, cliDetector, getMainWindow } = ctx
 
   // Bootstrap
   ipcMain.handle(IPC.BOOTSTRAP, () => {
@@ -54,9 +56,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     repository.listMessages(channelId, limit, before)
   )
   ipcMain.handle(IPC.MESSAGES_CREATE, async (_e, draft: MessageDraft) => {
+    // routeMessage creates the message, broadcasts via MESSAGES_STREAM, and dispatches to agents
     await messageRouter.routeMessage(draft)
-    // Return latest messages
-    return repository.listMessages(draft.channelId, 100)
   })
 
   // PTY
@@ -86,4 +87,21 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC.SKILLS_CREATE, (_e, draft: SkillDraft) => repository.createSkill(draft))
   ipcMain.handle(IPC.SKILLS_UPDATE, (_e, id: string, draft: Partial<SkillDraft>) => repository.updateSkill(id, draft))
   ipcMain.handle(IPC.SKILLS_DELETE, (_e, id: string) => repository.deleteSkill(id))
+
+  // CLI Detection
+  ipcMain.handle(IPC.CLI_DETECT_ALL, () => cliDetector.detectAll())
+  ipcMain.handle(IPC.CLI_DETECT, (_e, runtime: CliRuntime) => cliDetector.detect(runtime))
+
+  // CLI Session pre-launch
+  ipcMain.handle(IPC.CLI_START_SESSION, (_e, agentId: string, channelId: string) => {
+    const agent = repository.getAgent(agentId)
+    if (agent.type === 'cli') {
+      messageRouter.ensureCliSession(agent, channelId)
+    }
+  })
+
+  // Settings
+  ipcMain.handle(IPC.SETTINGS_GET, (_e, key: string) => repository.getSetting(key))
+  ipcMain.handle(IPC.SETTINGS_SET, (_e, key: string, value: string) => repository.setSetting(key, value))
+  ipcMain.handle(IPC.SETTINGS_DELETE, (_e, key: string) => repository.deleteSetting(key))
 }
