@@ -1,22 +1,23 @@
 # AgentCrew
+> **local Slack for your Agents.**
 
-Lightweight local multi-agent collaboration desktop tool. Manage multiple AI agents in one window — assign tasks via `@agent` in shared channels, watch CLI agents execute in real-time terminals, and let API agents stream responses inline.
+AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents collaborate to build wonderful things directly on your local machine. No code leaves your device, and no context is lost.
 
-**Human as Manager.** Only you dispatch tasks. No autonomous agent-to-agent chains.
+## Core Philosophy
+
+- **Human as Manager** — You dispatch every task. Agents never talk to each other autonomously. You stay in control.
+- **Bring Your Own Agents** — Works with any CLI tool (Claude Code, Codex, Gemini CLI, or your own) and any OpenAI-compatible API. No vendor lock-in.
+- **Local-First** — Everything runs on your machine. SQLite database, local PTY terminals, local file storage. No cloud dependency.
+- **Slack-Like UX** — Channels, DMs, @mentions, real-time streaming. If you know Slack, you know AgentCrew.
 
 ## Features
 
-- **Dual Agent Types** — CLI agents (Claude Code, Codex, Gemini CLI, opencode) with live terminal view, and API agents (any OpenAI-compatible endpoint) with streaming responses
-- **Interactive CLI Sessions** — CLI agents run in persistent interactive mode (not one-shot `--print`), supporting multi-turn conversation within a single terminal session
-- **Image Attachments** — Send images via file picker or paste (Ctrl+V); images are forwarded to API agents as Vision multimodal content, and to CLI agents as local file paths
-- **Channels** — Shared message spaces where you `@mention` agents to assign work; DM channels auto-created per agent. Each channel has isolated CLI sessions — the same agent in different channels runs independently
-- **Multi-Agent Terminals** — Each CLI agent gets its own terminal tab per channel; terminal auto-switches when you `@mention` an agent. Terminal panel is toggled per channel and resizable by dragging the divider
-- **Smart Output Extraction** — Uses xterm-headless to extract the final visible screen content from CLI tools, correctly handling TUI rendering, ANSI cursor movement, and screen redraws
-- **Summarizer (Optional)** — Configure an LLM to summarize CLI agent output before displaying in chat; falls back to last 20 lines if not configured
-- **Thinking Indicators** — Animated status verbs (Thinking, Musing, Pondering...) while agents are processing, scoped per channel
-- **Agent Icons** — Choose from 20 Lucide icons per agent, displayed in chat and sidebar
-- **Memory** — Dual-capsule Memvid topology: agent-private and channel-shared memory with auto-recall before each task and auto-retain after each reply
-- **Editable User Profile** — Customizable display name shown in chat messages
+- **CLI + API Agents** — Run CLI tools in live terminals, or call any OpenAI-compatible API with streaming
+- **Channels & DMs** — @mention agents in shared channels or chat 1-on-1; each channel runs isolated sessions
+- **Image Support** — Paste or attach images; sent as Vision API content (API agents) or file paths (CLI agents)
+- **Smart Output** — xterm-headless extracts clean screen content from TUI tools; optional LLM summarizer refines it further
+- **Resizable Terminals** — Per-channel terminal panels with tabs, drag-to-resize, and persistent xterm state
+- **Memory** — Agent-private and channel-shared memory capsules with automatic recall and retain
 
 ## Quick Start
 

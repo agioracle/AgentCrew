@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeImage, Menu } from 'electron'
 import { join } from 'path'
 import { createDatabase } from './database/db'
 import { AgentCrewRepository } from './database/repository'
@@ -64,6 +64,7 @@ async function bootstrap(): Promise<void> {
     minHeight: 600,
     backgroundColor: '#f4efe6',
     autoHideMenuBar: true,
+    icon: nativeImage.createFromPath(join(__dirname, '../../build/icon.png')),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
@@ -89,7 +90,43 @@ async function bootstrap(): Promise<void> {
   })
 }
 
+app.setName('AgentCrew')
+
 app.whenReady().then(() => {
+  // macOS: customize app menu name and About panel
+  // Windows/Linux: autoHideMenuBar is set, no custom menu needed
+  if (process.platform === 'darwin') {
+    app.setAboutPanelOptions({
+      applicationName: 'AgentCrew',
+      applicationVersion: app.getVersion(),
+      version: '',
+      copyright: 'Copyright (c) 2026 AgentCrew',
+      credits: 'local Slack for your Agents.',
+    })
+
+    const defaultMenu = Menu.getApplicationMenu()
+    const template: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'AgentCrew',
+        submenu: [
+          { label: 'About AgentCrew', role: 'about' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' },
+    ]
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+
   bootstrap().catch((err) => {
     console.error('[AgentCrew] Bootstrap failed:', err)
     app.quit()
@@ -97,7 +134,31 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      bootstrap()
+      // Only recreate the window, not the entire bootstrap (DB, IPC already initialized)
+      const { join } = require('path')
+      mainWindow = new BrowserWindow({
+        width: 1400,
+        height: 900,
+        minWidth: 900,
+        minHeight: 600,
+        backgroundColor: '#f4efe6',
+        autoHideMenuBar: true,
+        icon: nativeImage.createFromPath(join(__dirname, '../../build/icon.png')),
+        titleBarStyle: 'hiddenInset',
+        trafficLightPosition: { x: 12, y: 12 },
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.mjs'),
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: false
+        }
+      })
+      if (process.env.ELECTRON_RENDERER_URL) {
+        mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+      } else {
+        mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+      }
+      mainWindow.on('closed', () => { mainWindow = null })
     }
   })
 })
