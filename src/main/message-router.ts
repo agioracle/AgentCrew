@@ -490,7 +490,7 @@ export class MessageRouter {
       return
     }
 
-    const defaultSystemPrompt = `You are a concise summarizer. Given raw CLI tool output, extract and present the raw information clearly. Remove any terminal noise, ANSI artifacts, or redundant content. Keep your summary brief and actionable.
+    const defaultSystemPrompt = `You are a concise summarizer. Given raw CLI tool output, extract and present the raw information clearly and completely. Remove any terminal noise, ANSI artifacts, or redundant content.
 Only output the response text.
 Examples:
 1. if your summarized text is:
