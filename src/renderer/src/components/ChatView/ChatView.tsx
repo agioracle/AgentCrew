@@ -43,6 +43,13 @@ export function ChatView() {
     .filter(a => a.type === 'cli' && activeChannelId && agentPtyMap[`${a.id}:${activeChannelId}`])
     .map(a => ({ agentId: a.id, agentName: a.name, ptyId: agentPtyMap[`${a.id}:${activeChannelId}`] }))
 
+  // Build ALL pty entries from the full agentPtyMap so TerminalPanel instances
+  // stay mounted across channel switches (preserving xterm state).
+  const allPtyEntries = Object.entries(agentPtyMap).map(([key, ptyId]) => {
+    const [agentId, channelId] = key.split(':')
+    return { agentId, channelId, ptyId }
+  })
+
   const isDm = activeChannel?.isDm ?? false
 
   // Reset tab to chat when switching to DM
@@ -167,7 +174,7 @@ export function ChatView() {
           </div>
           <MessageInput />
 
-          {/* Drag handle + tabs + terminal panels — only when terminal is open */}
+          {/* Drag handle + tabs — only when terminal is open */}
           {terminalOpen && hasCliAgent && (
             <>
               {/* Drag handle */}
@@ -197,22 +204,6 @@ export function ChatView() {
               )}
             </>
           )}
-
-          {/* Terminal panels always mounted to preserve xterm state; hidden via CSS */}
-          {hasCliAgent && cliAgentPtyIds.map(({ agentId, ptyId }) => (
-            <div
-              key={ptyId}
-              style={{
-                display: terminalOpen ? 'block' : 'none',
-                height: terminalOpen ? terminalHeight : 0,
-              }}
-            >
-              <TerminalPanel
-                ptyId={ptyId}
-                active={terminalOpen && (activeTerminalAgentId ?? cliAgentPtyIds[0]?.agentId) === agentId}
-              />
-            </div>
-          ))}
         </>
       ) : (
         <div className="agents-tab">
@@ -243,6 +234,40 @@ export function ChatView() {
           </div>
         </div>
       )}
+
+      {/* Terminal panels — ALL entries always mounted OUTSIDE tab conditional.
+          Hidden panels are stacked at 0×0 with overflow:hidden so xterm never
+          sees a zero-size container (the inner div keeps a fixed size).
+          Only the active channel's panel is shown at full size. */}
+      <div style={{ position: 'relative' }}>
+        {allPtyEntries.map(({ agentId, channelId, ptyId }) => {
+          const belongsToActiveChannel = channelId === activeChannelId
+          const isVisible = belongsToActiveChannel && terminalOpen && tab === 'chat'
+          const isActiveTab = isVisible && (activeTerminalAgentId ?? cliAgentPtyIds[0]?.agentId) === agentId
+          return (
+            <div
+              key={ptyId}
+              style={isVisible ? {
+                height: terminalHeight,
+              } : {
+                // Keep the inner container at real dimensions inside a 0-height
+                // clipped wrapper so xterm canvas is never destroyed, but the
+                // wrapper takes no layout space and is invisible.
+                height: 0,
+                overflow: 'hidden',
+                pointerEvents: 'none',
+              }}
+            >
+              <div style={{ height: terminalHeight, width: '100%' }}>
+                <TerminalPanel
+                  ptyId={ptyId}
+                  active={isActiveTab}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -12,6 +12,8 @@ export function TerminalPanel({ ptyId, active }: TerminalPanelProps) {
   const termRef = useRef<Terminal | null>(null)
   const divRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const activeRef = useRef(active)
+  activeRef.current = active
 
   useEffect(() => {
     if (!divRef.current) return
@@ -43,10 +45,19 @@ export function TerminalPanel({ ptyId, active }: TerminalPanelProps) {
     term.open(divRef.current)
 
     // Fit after a tick to ensure the container has rendered
-    setTimeout(() => fitAddon.fit(), 50)
+    setTimeout(() => {
+      try { fitAddon.fit() } catch { /* ignore */ }
+    }, 50)
 
-    // Resize observer
-    const observer = new ResizeObserver(() => {
+    // Resize observer — only fit when this panel is the active/visible one.
+    // When hidden (parent clipped to 0 height), the inner container still
+    // has real dimensions, but we skip fitting to avoid any race conditions.
+    const observer = new ResizeObserver((entries) => {
+      if (!activeRef.current) return
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (width < 10 || height < 10) return
       try { fitAddon.fit() } catch { /* ignore */ }
     })
     observer.observe(divRef.current)
@@ -80,13 +91,15 @@ export function TerminalPanel({ ptyId, active }: TerminalPanelProps) {
     }
   }, [ptyId])
 
-  // Refit + focus when becoming active
+  // Refit + focus when becoming active (visible)
   useEffect(() => {
     if (active) {
+      // Use a slightly longer delay to ensure layout is settled after
+      // the parent wrapper transitions from 0-height to full height
       setTimeout(() => {
-        fitRef.current?.fit()
+        try { fitRef.current?.fit() } catch { /* ignore */ }
         termRef.current?.focus()
-      }, 50)
+      }, 80)
     }
   }, [active])
 
@@ -94,11 +107,7 @@ export function TerminalPanel({ ptyId, active }: TerminalPanelProps) {
     <div
       ref={divRef}
       className="terminal-container"
-      style={{
-        height: '100%',
-        visibility: active ? 'visible' : 'hidden',
-        position: active ? 'relative' : 'absolute',
-      }}
+      style={{ height: '100%' }}
     />
   )
 }
