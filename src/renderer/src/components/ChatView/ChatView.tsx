@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '../../store/app-store'
 import { MessageTimeline } from './MessageTimeline'
 import { MessageInput } from './MessageInput'
@@ -6,14 +6,20 @@ import { TerminalPanel } from './TerminalPanel'
 import { Terminal, Settings, Users } from 'lucide-react'
 import './ChatView.css'
 
+const DEFAULT_TERMINAL_HEIGHT = 260
+const MIN_TERMINAL_HEIGHT = 120
+const MIN_CHAT_HEIGHT = 150
+
 export function ChatView() {
   const activeChannelId = useAppStore(s => s.activeChannelId)
   const channels = useAppStore(s => s.channels)
   const agents = useAppStore(s => s.agents)
   const messages = useAppStore(s => s.messages)
   const openModal = useAppStore(s => s.openModal)
-  const terminalOpen = useAppStore(s => s.terminalOpen)
+  const terminalOpenMap = useAppStore(s => s.terminalOpen)
   const toggleTerminal = useAppStore(s => s.toggleTerminal)
+
+  const terminalOpen = activeChannelId ? !!terminalOpenMap[activeChannelId] : false
 
   const agentPtyMap = useAppStore(s => s.agentPtyMap)
   const activeTerminalAgentId = useAppStore(s => s.activeTerminalAgentId)
@@ -22,12 +28,20 @@ export function ChatView() {
   const [tab, setTab] = useState<'chat' | 'agents'>('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Per-channel terminal height (persisted in state during session)
+  const [terminalHeights, setTerminalHeights] = useState<Record<string, number>>({})
+  const terminalHeight = activeChannelId ? (terminalHeights[activeChannelId] ?? DEFAULT_TERMINAL_HEIGHT) : DEFAULT_TERMINAL_HEIGHT
+
+  // Drag state
+  const isDragging = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
   const activeChannel = channels.find(ch => ch.id === activeChannelId)
   const channelAgents = agents.filter(a => activeChannel?.memberIds.includes(a.id))
   const hasCliAgent = channelAgents.some(a => a.type === 'cli')
   const cliAgentPtyIds = channelAgents
-    .filter(a => a.type === 'cli' && agentPtyMap[a.id])
-    .map(a => ({ agentId: a.id, agentName: a.name, ptyId: agentPtyMap[a.id] }))
+    .filter(a => a.type === 'cli' && activeChannelId && agentPtyMap[`${a.id}:${activeChannelId}`])
+    .map(a => ({ agentId: a.id, agentName: a.name, ptyId: agentPtyMap[`${a.id}:${activeChannelId}`] }))
 
   const isDm = activeChannel?.isDm ?? false
 
@@ -43,6 +57,41 @@ export function ChatView() {
     }
   }, [messages])
 
+  // Drag handler for resizing terminal
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDragging.current = true
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+
+    const startY = e.clientY
+    const startHeight = terminalHeight
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const delta = startY - ev.clientY
+      let newHeight = startHeight + delta
+      // Clamp
+      newHeight = Math.max(MIN_TERMINAL_HEIGHT, newHeight)
+      newHeight = Math.min(containerRect.height - MIN_CHAT_HEIGHT, newHeight)
+      if (activeChannelId) {
+        setTerminalHeights(prev => ({ ...prev, [activeChannelId]: newHeight }))
+      }
+    }
+
+    const onMouseUp = () => {
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [terminalHeight, activeChannelId])
+
   if (!activeChannel) {
     return (
       <div className="empty-state">
@@ -53,7 +102,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="chat-view">
+    <div className="chat-view" ref={containerRef}>
       {/* Header */}
       <div className="channel-header">
         <div className="channel-title">
@@ -70,7 +119,7 @@ export function ChatView() {
           {hasCliAgent && (
             <button
               className={`icon-btn ${terminalOpen ? 'active' : ''}`}
-              onClick={toggleTerminal}
+              onClick={() => activeChannelId && toggleTerminal(activeChannelId)}
               title="Toggle Terminal"
             >
               <Terminal size={14} />
@@ -113,44 +162,57 @@ export function ChatView() {
       {/* Content */}
       {tab === 'chat' ? (
         <>
-          <div className="timeline-scroll" ref={scrollRef}>
+          <div className="timeline-scroll" ref={scrollRef} style={{ flex: 1, minHeight: MIN_CHAT_HEIGHT }}>
             <MessageTimeline />
           </div>
           <MessageInput />
+
+          {/* Drag handle + tabs + terminal panels — only when terminal is open */}
           {terminalOpen && hasCliAgent && (
-            <div className="terminal-wrapper">
-              {cliAgentPtyIds.length > 0 ? (
-                <>
-                  {/* Tab bar for multiple CLI agents */}
-                  {cliAgentPtyIds.length > 1 && (
-                    <div className="terminal-tabs">
-                      {cliAgentPtyIds.map(({ agentId, agentName }) => (
-                        <button
-                          key={agentId}
-                          className={`terminal-tab ${(activeTerminalAgentId ?? cliAgentPtyIds[0].agentId) === agentId ? 'active' : ''}`}
-                          onClick={() => setActiveTerminalAgent(agentId)}
-                        >
-                          {agentName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {/* Terminal panels — all mounted, visibility controlled */}
-                  {cliAgentPtyIds.map(({ agentId, ptyId }) => (
-                    <TerminalPanel
-                      key={ptyId}
-                      ptyId={ptyId}
-                      active={(activeTerminalAgentId ?? cliAgentPtyIds[0].agentId) === agentId}
-                    />
+            <>
+              {/* Drag handle */}
+              <div className="terminal-drag-handle" onMouseDown={handleDragStart}>
+                <div className="terminal-drag-line" />
+              </div>
+
+              {/* Tab bar for multiple CLI agents */}
+              {cliAgentPtyIds.length > 1 && (
+                <div className="terminal-tabs">
+                  {cliAgentPtyIds.map(({ agentId, agentName }) => (
+                    <button
+                      key={agentId}
+                      className={`terminal-tab ${(activeTerminalAgentId ?? cliAgentPtyIds[0].agentId) === agentId ? 'active' : ''}`}
+                      onClick={() => setActiveTerminalAgent(agentId)}
+                    >
+                      {agentName}
+                    </button>
                   ))}
-                </>
-              ) : (
-                <div className="terminal-empty">
+                </div>
+              )}
+
+              {cliAgentPtyIds.length === 0 && (
+                <div className="terminal-empty" style={{ height: terminalHeight }}>
                   Agent terminal will appear here when a CLI agent is running
                 </div>
               )}
-            </div>
+            </>
           )}
+
+          {/* Terminal panels always mounted to preserve xterm state; hidden via CSS */}
+          {hasCliAgent && cliAgentPtyIds.map(({ agentId, ptyId }) => (
+            <div
+              key={ptyId}
+              style={{
+                display: terminalOpen ? 'block' : 'none',
+                height: terminalOpen ? terminalHeight : 0,
+              }}
+            >
+              <TerminalPanel
+                ptyId={ptyId}
+                active={terminalOpen && (activeTerminalAgentId ?? cliAgentPtyIds[0]?.agentId) === agentId}
+              />
+            </div>
+          ))}
         </>
       ) : (
         <div className="agents-tab">

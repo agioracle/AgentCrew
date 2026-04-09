@@ -92,6 +92,11 @@ const api = {
     startSession: (agentId: string, channelId: string): Promise<void> =>
       ipcRenderer.invoke(IPC.CLI_START_SESSION, agentId, channelId),
   },
+
+  upload: {
+    image: (base64DataUrl: string, filename: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.UPLOAD_IMAGE, base64DataUrl, filename),
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

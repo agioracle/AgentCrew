@@ -24,16 +24,20 @@ export default function App() {
     const unsub = window.api.messages.onStream((msg: any) => {
       if (msg.type === 'pty-created') {
         const store = useAppStore.getState()
-        store.setAgentPty(msg.agentId, msg.ptyId)
-        store.setActiveTerminalAgent(msg.agentId)
-        // Auto-open terminal panel when a CLI agent starts
-        if (!store.terminalOpen) {
-          store.toggleTerminal()
+        const key = `${msg.agentId}:${msg.channelId}`
+        store.setAgentPty(key, msg.ptyId)
+        // Only switch terminal tab if the event is for the active channel
+        if (msg.channelId === store.activeChannelId) {
+          store.setActiveTerminalAgent(msg.agentId)
         }
       } else if (msg.type === 'terminal-focus') {
-        useAppStore.getState().setActiveTerminalAgent(msg.agentId)
+        const store = useAppStore.getState()
+        if (msg.channelId === store.activeChannelId) {
+          store.setActiveTerminalAgent(msg.agentId)
+        }
       } else if (msg.type === 'agent-thinking') {
-        useAppStore.getState().setAgentThinking(msg.agentId, msg.verb)
+        const key = `${msg.agentId}:${msg.channelId}`
+        useAppStore.getState().setAgentThinking(key, msg.verb)
       } else if (msg.type === 'agent-stream-chunk') {
         // API streaming chunks — handled elsewhere
       } else {

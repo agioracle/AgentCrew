@@ -33,10 +33,10 @@ export interface AppState {
   activeModal: ModalType
   modalData: unknown
   userName: string
-  terminalOpen: boolean
-  agentPtyMap: Record<string, string> // agentId -> ptyId
+  terminalOpen: Record<string, boolean> // channelId -> open state
+  agentPtyMap: Record<string, string> // "agentId:channelId" -> ptyId
   activeTerminalAgentId: string | null
-  thinkingAgents: Record<string, string> // agentId -> thinking verb
+  thinkingAgents: Record<string, string> // "agentId:channelId" -> thinking verb
   initialized: boolean
 
   // Actions
@@ -48,10 +48,10 @@ export interface AppState {
   openModal: (modal: ModalType, data?: unknown) => void
   closeModal: () => void
   setUserName: (name: string) => void
-  toggleTerminal: () => void
-  setAgentPty: (agentId: string, ptyId: string) => void
+  toggleTerminal: (channelId: string) => void
+  setAgentPty: (key: string, ptyId: string) => void
   setActiveTerminalAgent: (agentId: string) => void
-  setAgentThinking: (agentId: string, verb: string | null) => void
+  setAgentThinking: (key: string, verb: string | null) => void
 
   // Agent actions
   createAgent: (draft: AgentDraft) => Promise<AgentRecord>
@@ -79,7 +79,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeModal: null,
   modalData: null,
   userName: 'You',
-  terminalOpen: false,
+  terminalOpen: {},
   agentPtyMap: {},
   activeTerminalAgentId: null,
   thinkingAgents: {},
@@ -132,15 +132,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   openModal: (modal, data) => set({ activeModal: modal, modalData: data ?? null }),
   closeModal: () => set({ activeModal: null, modalData: null }),
   setUserName: (name) => set({ userName: name }),
-  toggleTerminal: () => set(s => ({ terminalOpen: !s.terminalOpen })),
-  setAgentPty: (agentId, ptyId) => set(s => ({ agentPtyMap: { ...s.agentPtyMap, [agentId]: ptyId } })),
+  toggleTerminal: (channelId) => set(s => ({ terminalOpen: { ...s.terminalOpen, [channelId]: !s.terminalOpen[channelId] } })),
+  setAgentPty: (key, ptyId) => set(s => ({ agentPtyMap: { ...s.agentPtyMap, [key]: ptyId } })),
   setActiveTerminalAgent: (agentId) => set({ activeTerminalAgentId: agentId }),
-  setAgentThinking: (agentId, verb) => set(s => {
+  setAgentThinking: (key, verb) => set(s => {
     if (verb === null) {
-      const { [agentId]: _, ...rest } = s.thinkingAgents
+      const { [key]: _, ...rest } = s.thinkingAgents
       return { thinkingAgents: rest }
     }
-    return { thinkingAgents: { ...s.thinkingAgents, [agentId]: verb } }
+    return { thinkingAgents: { ...s.thinkingAgents, [key]: verb } }
   }),
 
   // Agent

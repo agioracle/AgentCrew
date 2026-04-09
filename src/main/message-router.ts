@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import type { AgentCrewRepository } from './database/repository'
 import type { PtyManager } from './pty-manager'
 import type { MemoryService } from './memory-service'
-import type { MessageDraft, AgentRecord } from '../shared/types'
+import type { MessageDraft, AgentRecord, MessageAttachment } from '../shared/types'
 import { IPC } from '../shared/ipc-channels'
 import { ApiClient } from './api-client'
 import { homedir } from 'os'
@@ -103,15 +103,19 @@ export class MessageRouter {
       }
     }
 
+    // Extract image attachments info for agent dispatch
+    const imageAttachments = (draft.attachments ?? []).filter(a => a.type === 'image')
+    console.log('[MessageRouter] routeMessage attachments:', { total: draft.attachments?.length ?? 0, images: imageAttachments.length, paths: imageAttachments.map(a => a.data) })
+
     for (const agentId of agentIds) {
       try {
         const agent = this.ctx.repository.getAgent(agentId)
         // Strip @mentions from content before dispatching to agents
         const cleanContent = this.stripMentions(draft.content, agentIds, draft.channelId)
         if (agent.type === 'cli') {
-          this.dispatchCli(agent, draft.channelId, cleanContent)
+          this.dispatchCli(agent, draft.channelId, cleanContent, imageAttachments)
         } else if (agent.type === 'api') {
-          this.dispatchApi(agent, draft.channelId, cleanContent)
+          this.dispatchApi(agent, draft.channelId, cleanContent, imageAttachments)
         }
       } catch (err) {
         this.postError(draft.channelId, agentId, err)
@@ -179,11 +183,15 @@ export class MessageRouter {
     }
   }
 
-  // Track active CLI agent sessions — the CLI tool runs persistently in interactive mode
+  // Track active CLI agent sessions — keyed by "agentId:channelId" for isolation
+  // Each agent in each channel gets its own independent PTY session.
   private agentSessions = new Map<string, { ptyId: string; ready: boolean }>()
   // Queue of messages waiting for CLI tool to be ready
   private pendingMessages = new Map<string, Array<{ agent: AgentRecord; channelId: string; prompt: string }>>()
 
+  private sessionKey(agentId: string, channelId: string): string {
+    return `${agentId}:${channelId}`
+  }
   /**
    * Ensure a CLI session is running for the given agent.
    * If no session exists, spawns a shell + CLI tool.
@@ -193,8 +201,10 @@ export class MessageRouter {
     const win = this.ctx.getMainWindow()
     if (!win) return null
 
+    const key = this.sessionKey(agent.id, channelId)
+
     // Check existing session
-    const existing = this.agentSessions.get(agent.id)
+    const existing = this.agentSessions.get(key)
     if (existing && this.ctx.ptyManager.list().includes(existing.ptyId)) {
       return { ptyId: existing.ptyId, isNew: false }
     }
@@ -215,12 +225,12 @@ export class MessageRouter {
     )
 
     const session = { ptyId, ready: false }
-    this.agentSessions.set(agent.id, session)
+    this.agentSessions.set(key, session)
 
     // Notify renderer of the new PTY
     this.broadcast({ type: 'pty-created', agentId: agent.id, ptyId, channelId })
 
-    console.log('[MessageRouter] Launched CLI session:', { ptyId, launchCmd, agentName: agent.name })
+    console.log('[MessageRouter] Launched CLI session:', { ptyId, launchCmd, agentName: agent.name, channelId })
 
     // Detect when the CLI tool is ready to accept input, then flush pending messages
     this.waitForCliReady(agent, channelId, ptyId)
@@ -228,8 +238,8 @@ export class MessageRouter {
     // Handle CLI tool or shell exit
     this.ctx.ptyManager.onExit(ptyId, (_exitCode) => {
       console.log(`[MessageRouter] CLI session ${ptyId} exited`)
-      this.agentSessions.delete(agent.id)
-      this.pendingMessages.delete(agent.id)
+      this.agentSessions.delete(key)
+      this.pendingMessages.delete(key)
       // Clean up persistent turn detection listener
       const cb = this.turnDetectionCallbacks.get(ptyId)
       if (cb) {
@@ -286,16 +296,17 @@ export class MessageRouter {
   }
 
   private markSessionReady(agent: AgentRecord, channelId: string, ptyId: string): void {
-    const session = this.agentSessions.get(agent.id)
+    const key = this.sessionKey(agent.id, channelId)
+    const session = this.agentSessions.get(key)
     if (session) {
       session.ready = true
       console.log(`[MessageRouter] CLI session ready: ${ptyId}`)
     }
 
     // Flush any pending messages — with extra delay for first message after startup
-    const pending = this.pendingMessages.get(agent.id)
+    const pending = this.pendingMessages.get(key)
     if (pending && pending.length > 0) {
-      this.pendingMessages.delete(agent.id)
+      this.pendingMessages.delete(key)
       // Wait 5 seconds after ready to ensure the CLI tool's TUI is fully initialized
       setTimeout(() => {
         for (const msg of pending) {
@@ -306,7 +317,15 @@ export class MessageRouter {
     }
   }
 
-  private dispatchCli(agent: AgentRecord, channelId: string, prompt: string): void {
+  private dispatchCli(agent: AgentRecord, channelId: string, prompt: string, images: Omit<MessageAttachment, 'id'>[] = []): void {
+    // Append image file paths to the prompt so CLI tools can read them
+    let fullPrompt = prompt
+    const imagePaths = images.map(img => img.data).filter(Boolean) as string[]
+    if (imagePaths.length > 0) {
+      fullPrompt = `${prompt} ${imagePaths.join(' ')}`
+    }
+    console.log('[MessageRouter] dispatchCli:', { promptLength: fullPrompt.length, imageCount: images.length, imagePaths })
+
     // Ensure session is running (may have been pre-launched from sidebar click)
     const session = this.ensureCliSession(agent, channelId)
     if (!session) {
@@ -315,7 +334,7 @@ export class MessageRouter {
     }
 
     // Always notify renderer to switch terminal tab to this agent
-    this.broadcast({ type: 'terminal-focus', agentId: agent.id })
+    this.broadcast({ type: 'terminal-focus', agentId: agent.id, channelId })
 
     // Show thinking indicator
     this.startThinking(agent.id, channelId)
@@ -323,21 +342,22 @@ export class MessageRouter {
     this.ctx.repository.updateAgentStatus(agent.id, 'running')
 
     // Check if the session is ready to accept messages
-    const sessionState = this.agentSessions.get(agent.id)
+    const key = this.sessionKey(agent.id, channelId)
+    const sessionState = this.agentSessions.get(key)
     if (sessionState && !sessionState.ready) {
       // CLI tool still starting up — queue the message
       console.log(`[MessageRouter] CLI not ready, queuing message for ${agent.name}`)
-      let queue = this.pendingMessages.get(agent.id)
+      let queue = this.pendingMessages.get(key)
       if (!queue) {
         queue = []
-        this.pendingMessages.set(agent.id, queue)
+        this.pendingMessages.set(key, queue)
       }
-      queue.push({ agent, channelId, prompt })
+      queue.push({ agent, channelId, prompt: fullPrompt })
       return
     }
 
     // Session is ready — send immediately
-    this.sendUserMessage(agent, channelId, session.ptyId, prompt)
+    this.sendUserMessage(agent, channelId, session.ptyId, fullPrompt)
   }
 
   /**
@@ -348,21 +368,48 @@ export class MessageRouter {
   private sendUserMessage(agent: AgentRecord, channelId: string, ptyId: string, prompt: string, isFirstMessage = false): void {
     this.ctx.repository.updateAgentStatus(agent.id, 'running')
 
-    // Write text first, then Enter separately.
-    // For the first message after CLI startup, use a longer delay
-    // to ensure the TUI is fully ready to accept input.
-    this.ctx.ptyManager.write(ptyId, prompt)
-    const enterDelay = isFirstMessage ? 1000 : 50
-    setTimeout(() => {
-      this.ctx.ptyManager.write(ptyId, '\r')
-    }, enterDelay)
+    // Write text in small chunks to simulate typing. This is the most
+    // universally compatible approach — works with all CLI tools regardless
+    // of their TUI framework (ink, blessed, raw readline, etc.).
+    // Bracketed paste mode is not universally supported, and writing large
+    // text at once can cause TUI input buffers to drop content.
+    this.writeChunked(ptyId, prompt, isFirstMessage)
 
-    console.log('[MessageRouter] Sent message to CLI:', { ptyId, promptLength: prompt.length })
+    console.log('[MessageRouter] Sent message to CLI:', { ptyId, runtime: agent.runtime, promptLength: prompt.length })
 
     // Start persistent turn detection if not already running for this PTY
     if (!this.turnDetectionCallbacks.has(ptyId)) {
       this.detectTurnCompletion(agent, channelId, ptyId)
     }
+  }
+
+  /**
+   * Write text to PTY in small chunks with delays, then send Enter.
+   * This simulates typing and is universally compatible with all CLI tools.
+   */
+  private writeChunked(ptyId: string, text: string, isFirstMessage: boolean): void {
+    const CHUNK_SIZE = 10
+    const CHUNK_DELAY = 20 // ms between chunks
+    const chunks: string[] = []
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+      chunks.push(text.slice(i, i + CHUNK_SIZE))
+    }
+
+    let i = 0
+    const writeNext = () => {
+      if (i < chunks.length) {
+        this.ctx.ptyManager.write(ptyId, chunks[i])
+        i++
+        setTimeout(writeNext, CHUNK_DELAY)
+      } else {
+        // All chunks written — send Enter
+        const enterDelay = isFirstMessage ? 1000 : 200
+        setTimeout(() => {
+          this.ctx.ptyManager.write(ptyId, '\r')
+        }, enterDelay)
+      }
+    }
+    writeNext()
   }
 
   /**
@@ -400,14 +447,14 @@ export class MessageRouter {
       // Use xterm-headless to extract clean screen content
       const screenText = await extractScreenContent(snapshot)
       if (!screenText) {
-        this.stopThinking(agent.id)
+        this.stopThinking(agent.id, channelId)
         this.ctx.repository.updateAgentStatus(agent.id, 'idle')
         return
       }
 
       // Skip if screen content is identical to last turn (no new output)
       if (screenText === lastScreenText) {
-        this.stopThinking(agent.id)
+        this.stopThinking(agent.id, channelId)
         this.ctx.repository.updateAgentStatus(agent.id, 'idle')
         return
       }
@@ -490,7 +537,7 @@ export class MessageRouter {
       return
     }
 
-    const defaultSystemPrompt = `You are a concise summarizer. Given raw CLI tool output, extract and present the raw information clearly and completely. Remove any terminal noise, ANSI artifacts, or redundant content.
+    const defaultSystemPrompt = `You are a concise summarizer. Given raw CLI tool output, extract and present the raw information clearly. Remove any terminal noise, ANSI artifacts, or redundant content. Keep your summary brief and actionable.
 Only output the response text.
 Examples:
 1. if your summarized text is:
@@ -555,7 +602,7 @@ Hello. How can I help you today?
   }
 
   private postCliReply(agent: AgentRecord, channelId: string, content: string): void {
-    this.stopThinking(agent.id)
+    this.stopThinking(agent.id, channelId)
     const replyMsg = this.ctx.repository.createMessage({
       channelId,
       senderType: 'agent',
@@ -567,7 +614,7 @@ Hello. How can I help you today?
     this.ctx.repository.updateAgentStatus(agent.id, 'idle')
   }
 
-  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string, attachmentData?: { images: string[] }): void {
+  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string, images: Omit<MessageAttachment, 'id'>[] = []): void {
     if (!agent.apiEndpoint || !agent.apiKey || !agent.model) {
       this.postError(channelId, agent.id, new Error('API agent missing endpoint, key, or model configuration'))
       return
@@ -583,13 +630,30 @@ Hello. How can I help you today?
 
     // Build conversation context from recent channel messages
     const recentMessages = this.ctx.repository.listMessages(channelId, 20)
-    const chatMessages = recentMessages.map(m => ({
+    const chatMessages: { role: 'user' | 'assistant'; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }[] = recentMessages.map(m => ({
       role: (m.senderType === 'human' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content
     }))
-    // Replace last user message with enriched version
+
+    // Replace last user message with enriched version, and add images if present
     if (chatMessages.length > 0 && chatMessages[chatMessages.length - 1].role === 'user') {
-      chatMessages[chatMessages.length - 1].content = enrichedPrompt
+      if (images.length > 0) {
+        // Build multimodal content array for Vision API
+        const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+          { type: 'text', text: enrichedPrompt }
+        ]
+        for (const img of images) {
+          if (img.url) {
+            contentParts.push({
+              type: 'image_url',
+              image_url: { url: img.url } // base64 data URL
+            })
+          }
+        }
+        chatMessages[chatMessages.length - 1].content = contentParts
+      } else {
+        chatMessages[chatMessages.length - 1].content = enrichedPrompt
+      }
     }
 
     // Create a placeholder message that will be updated with streaming content
@@ -607,7 +671,7 @@ Hello. How can I help you today?
       // onChunk
       (chunk) => {
         // Stop thinking on first chunk — streaming has started
-        this.stopThinking(agent.id)
+        this.stopThinking(agent.id, channelId)
         fullResponse += chunk
         // Stream partial updates to renderer
         this.broadcast({ type: 'agent-stream-chunk', agentId: agent.id, channelId, chunk, fullText: fullResponse })
@@ -627,7 +691,7 @@ Hello. How can I help you today?
       },
       // onError
       (err) => {
-        this.stopThinking(agent.id)
+        this.stopThinking(agent.id, channelId)
         this.postError(channelId, agent.id, err)
         this.ctx.repository.updateAgentStatus(agent.id, 'error')
       }
@@ -638,24 +702,26 @@ Hello. How can I help you today?
   private thinkingTimers = new Map<string, ReturnType<typeof setInterval>>()
 
   private startThinking(agentId: string, channelId: string): void {
-    this.stopThinking(agentId) // clear any existing
+    const key = `${agentId}:${channelId}`
+    this.stopThinking(agentId, channelId) // clear any existing
     // Send initial verb
     const verb = randomThinkingVerb()
-    this.broadcast({ type: 'agent-thinking', agentId, verb })
+    this.broadcast({ type: 'agent-thinking', agentId, channelId, verb })
     // Rotate verb every 3 seconds
     const timer = setInterval(() => {
-      this.broadcast({ type: 'agent-thinking', agentId, verb: randomThinkingVerb() })
+      this.broadcast({ type: 'agent-thinking', agentId, channelId, verb: randomThinkingVerb() })
     }, 3000)
-    this.thinkingTimers.set(agentId, timer)
+    this.thinkingTimers.set(key, timer)
   }
 
-  private stopThinking(agentId: string): void {
-    const timer = this.thinkingTimers.get(agentId)
+  private stopThinking(agentId: string, channelId: string): void {
+    const key = `${agentId}:${channelId}`
+    const timer = this.thinkingTimers.get(key)
     if (timer) {
       clearInterval(timer)
-      this.thinkingTimers.delete(agentId)
+      this.thinkingTimers.delete(key)
     }
-    this.broadcast({ type: 'agent-thinking', agentId, verb: null })
+    this.broadcast({ type: 'agent-thinking', agentId, channelId, verb: null })
   }
 
   private broadcast(msg: unknown): void {

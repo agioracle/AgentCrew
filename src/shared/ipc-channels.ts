@@ -57,4 +57,7 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_DELETE: 'settings:delete',
+
+  // Upload
+  UPLOAD_IMAGE: 'upload:image',
 } as const

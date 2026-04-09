@@ -8,11 +8,12 @@ Lightweight local multi-agent collaboration desktop tool. Manage multiple AI age
 
 - **Dual Agent Types** — CLI agents (Claude Code, Codex, Gemini CLI, opencode) with live terminal view, and API agents (any OpenAI-compatible endpoint) with streaming responses
 - **Interactive CLI Sessions** — CLI agents run in persistent interactive mode (not one-shot `--print`), supporting multi-turn conversation within a single terminal session
-- **Channels** — Shared message spaces where you `@mention` agents to assign work; DM channels auto-created per agent
-- **Multi-Agent Terminals** — Each CLI agent gets its own terminal tab; terminal auto-switches when you `@mention` an agent
+- **Image Attachments** — Send images via file picker or paste (Ctrl+V); images are forwarded to API agents as Vision multimodal content, and to CLI agents as local file paths
+- **Channels** — Shared message spaces where you `@mention` agents to assign work; DM channels auto-created per agent. Each channel has isolated CLI sessions — the same agent in different channels runs independently
+- **Multi-Agent Terminals** — Each CLI agent gets its own terminal tab per channel; terminal auto-switches when you `@mention` an agent. Terminal panel is toggled per channel and resizable by dragging the divider
 - **Smart Output Extraction** — Uses xterm-headless to extract the final visible screen content from CLI tools, correctly handling TUI rendering, ANSI cursor movement, and screen redraws
 - **Summarizer (Optional)** — Configure an LLM to summarize CLI agent output before displaying in chat; falls back to last 20 lines if not configured
-- **Thinking Indicators** — Animated status verbs (Thinking, Musing, Pondering...) while agents are processing, including during summarization
+- **Thinking Indicators** — Animated status verbs (Thinking, Musing, Pondering...) while agents are processing, scoped per channel
 - **Agent Icons** — Choose from 20 Lucide icons per agent, displayed in chat and sidebar
 - **Memory** — Dual-capsule Memvid topology: agent-private and channel-shared memory with auto-recall before each task and auto-retain after each reply
 - **Editable User Profile** — Customizable display name shown in chat messages
@@ -33,6 +34,9 @@ npm run dev       # Start dev server + Electron app
 npm run build     # Production build
 npm run preview   # Preview production build
 npm run rebuild   # Rebuild native modules (node-pty, better-sqlite3)
+npm run dist      # Package installer for current platform
+npm run dist:mac  # Package macOS (dmg + zip, x64 + arm64)
+npm run dist:win  # Package Windows (nsis, x64)
 ```
 
 ## Summarizer Configuration
@@ -50,6 +54,21 @@ To configure, go to **Settings → SUMMARIZER** and fill in:
 - **System Prompt** — Pre-filled with a tuned default; expand to customize if needed
 
 Use the **Clear** button to remove all Summarizer configuration and revert to truncation mode.
+
+## Image Attachments
+
+You can send images to agents by:
+- Clicking the **paperclip button** in the chat input to select image files
+- **Pasting** from clipboard (Ctrl+V / Cmd+V) — e.g. screenshots
+
+Images are saved to `~/.agentcrew/uploads/` and forwarded differently depending on the agent type:
+
+| Agent Type | How images are sent |
+|------------|-------------------|
+| **API Agent** | OpenAI Vision format — `image_url` content parts with base64 data URLs |
+| **CLI Agent** | Local file paths appended to the prompt text (e.g. `analyze this /path/to/image.png`) |
+
+CLI tools like Claude Code and Gemini CLI can read image files from the provided paths. Images are displayed as thumbnails in the chat message bubble.
 
 ## CLI Agent Turn Detection
 
@@ -105,7 +124,7 @@ SQLite tables — no task-run state machines, no artifact versioning, no audit l
 | `agents` | CLI and API agent configs, icon, memory capsule ID |
 | `channels` | Named message spaces with shared memory capsule ID |
 | `channel_members` | Agent-to-channel membership |
-| `messages` | Chat messages with sender type and @mentions |
+| `messages` | Chat messages with sender type, @mentions, and image attachments |
 | `settings` | Key-value settings (Summarizer config, user preferences) |
 
 ## Agent Types
@@ -133,14 +152,14 @@ Configure: endpoint URL + API key + model name + optional system prompt.
 ## Message Routing
 
 ```
-You type: @coder implement login
+You type: @coder implement login [+ optional image attachments]
     ↓
 message-router strips @mentions → finds Coder agent
     ↓
 Memory recall: query agent-private + channel-shared capsules → inject context
     ↓
-CLI Agent: write to interactive PTY → detect turn completion → extract screen → summarize → post
-API Agent: HTTP POST to endpoint → stream SSE chunks → post full response
+CLI Agent: chunked write to interactive PTY (text + image paths) → detect turn → extract screen → summarize → post
+API Agent: HTTP POST with multimodal content (text + image base64) → stream SSE chunks → post full response
     ↓
 Memory retain: write to both capsules
 ```
@@ -156,7 +175,7 @@ Agent replies containing `@other-agent` are displayed as plain text — no re-ro
 | Terminal | xterm.js 5, @xterm/headless 5, node-pty 1 |
 | Database | better-sqlite3 12 |
 | Memory | Memvid JSON shim (upgradeable to @memvid/sdk) |
-| Build | electron-vite 5, Vite 6 |
+| Build | electron-vite 5, Vite 6, electron-builder 26 |
 | Icons | lucide-react |
 
 ## Design

@@ -147,23 +147,4 @@ export class ApiClient {
     req.write(body)
     req.end()
   }
-
-  /**
-   * Convert message with attachments to Vision API format.
-   * Transforms string content messages to multimodal format with images.
-   */
-  static toVisionFormat(messages: ChatMessage[], includeAttachments: boolean = true): ChatMessage[] {
-    if (!includeAttachments) return messages
-
-    return messages.map(msg => {
-      // Keep system and assistant messages as-is
-      if (msg.role !== 'user' || typeof msg.content !== 'string') {
-        return msg
-      }
-
-      // For user messages, we could extend this to include vision content
-      // For now, just return as-is (attachments are handled at message-router level)
-      return msg
-    })
-  }
 }

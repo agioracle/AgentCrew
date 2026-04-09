@@ -5,6 +5,10 @@ import type { PtyManager } from './pty-manager'
 import type { MessageRouter } from './message-router'
 import type { CliDetector } from './cli-detector'
 import type { AgentDraft, ChannelDraft, MessageDraft, McpServerDraft, SkillDraft, CliRuntime } from '../shared/types'
+import { randomUUID } from 'crypto'
+import { homedir } from 'os'
+import { resolve } from 'path'
+import { mkdirSync, writeFileSync } from 'fs'
 
 export interface IpcContext {
   repository: AgentCrewRepository
@@ -104,4 +108,21 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC.SETTINGS_GET, (_e, key: string) => repository.getSetting(key))
   ipcMain.handle(IPC.SETTINGS_SET, (_e, key: string, value: string) => repository.setSetting(key, value))
   ipcMain.handle(IPC.SETTINGS_DELETE, (_e, key: string) => repository.deleteSetting(key))
+
+  // Upload — save base64 image to disk, return absolute path
+  const uploadsDir = resolve(homedir(), '.agentcrew', 'uploads')
+  mkdirSync(uploadsDir, { recursive: true })
+
+  ipcMain.handle(IPC.UPLOAD_IMAGE, (_e, base64DataUrl: string, filename: string) => {
+    // base64DataUrl: "data:image/png;base64,iVBOR..."
+    const match = base64DataUrl.match(/^data:image\/(\w+);base64,(.+)$/)
+    if (!match) throw new Error('Invalid image data URL')
+    const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
+    const buffer = Buffer.from(match[2], 'base64')
+    const safeName = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
+    const filePath = resolve(uploadsDir, safeName)
+    writeFileSync(filePath, buffer)
+    console.log(`[IPC] Saved image: ${filePath} (${buffer.length} bytes)`)
+    return filePath
+  })
 }

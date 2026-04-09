@@ -291,8 +291,35 @@
 
 /* ── Terminal Panel ────────────────────────────────────── */
 
+.terminal-drag-handle {
+  height: 6px;
+  background: var(--line-soft);
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-top: var(--border-w) solid var(--line);
+  transition: background 0.15s;
+}
+
+.terminal-drag-handle:hover {
+  background: var(--line);
+}
+
+.terminal-drag-line {
+  width: 32px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--muted);
+  opacity: 0.5;
+}
+
+.terminal-drag-handle:hover .terminal-drag-line {
+  opacity: 1;
+}
+
 .terminal-wrapper {
-  height: 250px;
   border-top: var(--border-w) solid var(--line);
   background: #0a1018;
   position: relative;
@@ -475,27 +502,11 @@
 
 /* ── Icon Button ───────────────────────────────────────– */
 
-.icon-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius);
-  border: var(--border-w) solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.15s;
+.chat-view .icon-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
 }
 
-.icon-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.icon-btn:disabled {
+.chat-view .icon-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

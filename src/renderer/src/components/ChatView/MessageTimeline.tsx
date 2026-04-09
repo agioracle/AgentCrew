@@ -108,6 +108,7 @@ export function MessageTimeline() {
   const messages = useAppStore(s => s.messages)
   const agents = useAppStore(s => s.agents)
   const thinkingAgents = useAppStore(s => s.thinkingAgents)
+  const activeChannelId = useAppStore(s => s.activeChannelId)
 
   if (messages.length === 0) {
     return (
@@ -140,8 +141,11 @@ export function MessageTimeline() {
           <MessageBubble key={item.msg.id} message={item.msg} />
         )
       )}
-      {/* Thinking indicators for agents currently processing */}
-      {Object.entries(thinkingAgents).map(([agentId, verb]) => {
+      {/* Thinking indicators for agents currently processing in this channel */}
+      {Object.entries(thinkingAgents)
+        .filter(([key]) => key.endsWith(`:${activeChannelId}`))
+        .map(([key, verb]) => {
+        const agentId = key.split(':')[0]
         const agent = agents.find(a => a.id === agentId)
         return (
           <ThinkingIndicator
