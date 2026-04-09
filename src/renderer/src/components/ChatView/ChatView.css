@@ -510,3 +510,17 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.attach-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  border: var(--border-w) solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+
+.attach-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}

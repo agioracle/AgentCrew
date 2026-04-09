@@ -212,12 +212,12 @@ export function MessageInput() {
         />
 
         <button
-          className="icon-btn"
+          className="icon-btn attach-btn"
           onClick={() => fileInputRef.current?.click()}
           title="Attach image"
           disabled={isUploading}
         >
-          <Paperclip size={14} />
+          <Paperclip size={18} />
         </button>
 
         <input
