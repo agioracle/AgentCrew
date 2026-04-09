@@ -63,6 +63,7 @@ function mapMessage(row: Record<string, unknown>): MessageRecord {
     senderId: (row.sender_id as string | null) ?? null,
     content: row.content as string,
     mentions: parseJson(row.mentions as string, []),
+    attachments: parseJson(row.attachments as string, []),
     createdAt: row.created_at as string
   }
 }
@@ -274,9 +275,16 @@ export class AgentCrewRepository {
   createMessage(draft: MessageDraft): MessageRecord {
     const id = randomUUID()
     const ts = now()
+    
+    // Generate IDs for attachments if provided
+    const attachments = (draft.attachments ?? []).map(att => ({
+      ...att,
+      id: randomUUID()
+    }))
+    
     this.db.prepare(`
-      INSERT INTO messages (id, channel_id, sender_type, sender_id, content, mentions, created_at)
-      VALUES (@id, @channel_id, @sender_type, @sender_id, @content, @mentions, @created_at)
+      INSERT INTO messages (id, channel_id, sender_type, sender_id, content, mentions, attachments, created_at)
+      VALUES (@id, @channel_id, @sender_type, @sender_id, @content, @mentions, @attachments, @created_at)
     `).run({
       id,
       channel_id: draft.channelId,
@@ -284,10 +292,12 @@ export class AgentCrewRepository {
       sender_id: draft.senderId ?? null,
       content: draft.content,
       mentions: JSON.stringify(draft.mentions ?? []),
+      attachments: JSON.stringify(attachments),
       created_at: ts
     })
     return mapMessage(this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Record<string, unknown>)
   }
+
 
   // ── MCP Servers ──
   listMcpServers(): McpServerRecord[] {

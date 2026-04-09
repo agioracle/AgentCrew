@@ -567,7 +567,7 @@ Hello. How can I help you today?
     this.ctx.repository.updateAgentStatus(agent.id, 'idle')
   }
 
-  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string): void {
+  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string, attachmentData?: { images: string[] }): void {
     if (!agent.apiEndpoint || !agent.apiKey || !agent.model) {
       this.postError(channelId, agent.id, new Error('API agent missing endpoint, key, or model configuration'))
       return

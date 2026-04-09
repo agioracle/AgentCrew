@@ -1,5 +1,5 @@
 import { useAppStore } from '../../store/app-store'
-import type { MessageRecord } from '@shared/types'
+import type { MessageRecord, MessageAttachment } from '@shared/types'
 import { User, Bot } from 'lucide-react'
 import { AgentIcon } from '../AgentIcon'
 
@@ -16,6 +16,40 @@ function formatDate(iso: string): string {
   yesterday.setDate(today.getDate() - 1)
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
   return d.toLocaleDateString()
+}
+
+// Attachment display component
+function AttachmentGallery({ attachments }: { attachments: MessageAttachment[] }) {
+  return (
+    <div className="attachment-gallery">
+      {attachments.map(att => (
+        <div key={att.id} className="attachment">
+          {att.type === 'image' && (
+            <img
+              src={att.url}
+              alt={att.filename}
+              className="attachment-image"
+              title={`${att.filename} (${(att.size / 1024).toFixed(1)} KB)`}
+            />
+          )}
+          {att.type === 'file' && (
+            <div className="attachment-file">
+              <div className="attachment-icon">📎</div>
+              <div className="attachment-info">
+                <div className="attachment-filename">{att.filename}</div>
+                <div className="attachment-size">{(att.size / 1024).toFixed(1)} KB</div>
+              </div>
+            </div>
+          )}
+          {att.type === 'code' && (
+            <div className="attachment-code">
+              <pre><code>{att.data?.substring(0, 200)}{att.data && att.data.length > 200 ? '...' : ''}</code></pre>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function MessageBubble({ message }: { message: MessageRecord }) {
@@ -40,6 +74,9 @@ export function MessageBubble({ message }: { message: MessageRecord }) {
           <span className="message-time">{formatTime(message.createdAt)}</span>
         </div>
         <div className="message-content">{message.content}</div>
+        {message.attachments && message.attachments.length > 0 && (
+          <AttachmentGallery attachments={message.attachments} />
+        )}
       </div>
     </div>
   )

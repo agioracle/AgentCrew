@@ -49,6 +49,7 @@ export function initializeSchema(db: Database.Database): void {
       sender_id         TEXT,
       content           TEXT NOT NULL,
       mentions          TEXT NOT NULL DEFAULT '[]',
+      attachments       TEXT NOT NULL DEFAULT '[]',
       created_at        TEXT NOT NULL,
       FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
     );
@@ -99,6 +100,7 @@ function migrateIfNeeded(db: Database.Database): void {
     'ALTER TABLE channels ADD COLUMN is_dm INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE channels ADD COLUMN working_dir TEXT',
     "ALTER TABLE agents ADD COLUMN icon TEXT DEFAULT 'bot'",
+    "ALTER TABLE messages ADD COLUMN attachments TEXT DEFAULT '[]'",
   ]
   for (const sql of migrations) {
     try {

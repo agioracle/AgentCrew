@@ -341,3 +341,161 @@
   color: #8ee8d8;
   border-bottom-color: #8ee8d8;
 }
+
+/* ── Attachments ───────────────────────────────────────── */
+
+.attachments-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.attachment-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.attachment-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.attachment-remove {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.attachment-item:hover .attachment-remove {
+  opacity: 1;
+}
+
+.attachment-remove:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.attachment-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attachment {
+  display: flex;
+  flex-direction: column;
+  max-width: 300px;
+}
+
+.attachment-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-soft);
+}
+
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--line-soft);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+.attachment-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.attachment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-filename {
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-size {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.attachment-code {
+  background: var(--line-soft);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.attachment-code pre {
+  margin: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.attachment-code code {
+  font-family: 'Monaco', 'Courier New', monospace;
+  color: var(--text-secondary);
+}
+
+/* ── Icon Button ───────────────────────────────────────– */
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  border: var(--border-w) solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -82,6 +82,19 @@ export interface ChannelDraft {
   memberIds?: string[]
 }
 
+// ─── Message Attachments (NEW) ─────────────────────────
+
+export interface MessageAttachment {
+  id: string
+  type: 'image' | 'file' | 'code'
+  mimeType: string
+  filename: string
+  size: number
+  url: string
+  data?: string
+  metadata?: Record<string, unknown>
+}
+
 // ─── Message ─────────────────────────────────────────────
 
 export interface MessageRecord {
@@ -92,6 +105,7 @@ export interface MessageRecord {
   content: string
   mentions: string[]
   createdAt: string
+  attachments?: MessageAttachment[]
 }
 
 export interface MessageDraft {
@@ -100,6 +114,7 @@ export interface MessageDraft {
   senderId?: string | null
   content: string
   mentions?: string[]
+  attachments?: Omit<MessageAttachment, 'id'>[]
 }
 
 // ─── MCP Server ──────────────────────────────────────────

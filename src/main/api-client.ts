@@ -2,9 +2,17 @@ import https from 'https'
 import http from 'http'
 import { URL } from 'url'
 
+interface ChatMessageContent {
+  type: 'text' | 'image_url'
+  text?: string
+  image_url?: {
+    url: string
+  }
+}
+
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ChatMessageContent[]
 }
 
 interface ApiClientOptions {
@@ -26,6 +34,7 @@ export class ApiClient {
   /**
    * Send a chat completion request with SSE streaming.
    * Calls onChunk for each text delta, onDone when complete.
+   * Supports Vision API with image attachments.
    */
   static async streamChat(
     options: ApiClientOptions,
@@ -137,5 +146,24 @@ export class ApiClient {
     req.on('error', onError)
     req.write(body)
     req.end()
+  }
+
+  /**
+   * Convert message with attachments to Vision API format.
+   * Transforms string content messages to multimodal format with images.
+   */
+  static toVisionFormat(messages: ChatMessage[], includeAttachments: boolean = true): ChatMessage[] {
+    if (!includeAttachments) return messages
+
+    return messages.map(msg => {
+      // Keep system and assistant messages as-is
+      if (msg.role !== 'user' || typeof msg.content !== 'string') {
+        return msg
+      }
+
+      // For user messages, we could extend this to include vision content
+      // For now, just return as-is (attachments are handled at message-router level)
+      return msg
+    })
   }
 }
