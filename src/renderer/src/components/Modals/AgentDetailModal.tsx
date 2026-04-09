@@ -101,8 +101,8 @@ export function AgentDetailModal() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">DESCRIPTION <span className="optional">(optional)</span></label>
-          <input className="form-input" value={description} onChange={e => setDescription(e.target.value)} />
+          <label className="form-label">DESCRIPTION <span className="required">*</span></label>
+          <textarea className="form-input" placeholder="Briefly describe this agent's role, expertise, and capabilities" value={description} onChange={e => setDescription(e.target.value)} rows={2} style={{ resize: 'none', overflow: 'hidden' }} onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }} />
         </div>
 
         {isCli ? (
@@ -166,7 +166,7 @@ export function AgentDetailModal() {
           <button className="btn btn-danger" onClick={handleDelete}>Delete Agent</button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-default" onClick={closeModal}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim() || loading}>
+            <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim() || !description.trim() || loading}>
               Save
             </button>
           </div>

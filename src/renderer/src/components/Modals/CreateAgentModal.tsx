@@ -115,7 +115,7 @@ export function CreateAgentModal() {
   const cliCommandValid = cliCommand.trim().startsWith('/')
   const cliCommandTouched = cliCommand.trim().length > 0
 
-  const canSubmit = name.trim() && (
+  const canSubmit = name.trim() && description.trim() && (
     type === 'cli'
       ? (runtime !== '' && cliCommandValid && workingDir.trim().length > 0)
       : (apiEndpoint.trim() && apiKey.trim() && apiModel.trim())
@@ -140,8 +140,8 @@ export function CreateAgentModal() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">DESCRIPTION <span className="optional">(optional)</span></label>
-          <input className="form-input" placeholder="What does this agent do?" value={description} onChange={e => setDescription(e.target.value)} />
+          <label className="form-label">DESCRIPTION <span className="required">*</span></label>
+          <textarea className="form-input" placeholder="Briefly describe this agent's role, expertise, and capabilities" value={description} onChange={e => setDescription(e.target.value)} rows={2} style={{ resize: 'none', overflow: 'hidden' }} onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }} />
         </div>
 
         <div className="form-group">
