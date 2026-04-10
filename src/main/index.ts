@@ -1,5 +1,7 @@
 import { app, BrowserWindow, nativeImage, Menu } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
+import { mkdirSync } from 'fs'
 import { createDatabase } from './database/db'
 import { AgentCrewRepository } from './database/repository'
 import { seedDefaultData } from './database/seed'
@@ -17,10 +19,10 @@ function getMainWindow(): BrowserWindow | null {
 }
 
 async function bootstrap(): Promise<void> {
-  const userDataPath = app.getPath('userData')
-  const dbPath = join(userDataPath, 'agentcrew.db')
+  const sqliteDir = join(homedir(), '.agentcrew', 'sqlite')
+  mkdirSync(sqliteDir, { recursive: true })
+  const dbPath = join(sqliteDir, 'agentcrew.db')
 
-  console.log('[AgentCrew] userData:', userDataPath)
   console.log('[AgentCrew] database:', dbPath)
 
   // Database
