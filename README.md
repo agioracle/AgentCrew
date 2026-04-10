@@ -25,7 +25,7 @@ AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents c
 
 ## Roadmap
 
-- [ ] Agent as Manager
+- [ ] Agent as Manager: Agent dispatch every task. Agents talk to each other autonomously. Human still stay in control.
 
 
 ## Quick Start
