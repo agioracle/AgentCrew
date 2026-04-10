@@ -14,10 +14,12 @@ AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents c
 
 - **CLI + API Agents** — Run CLI tools in live terminals, or call any OpenAI-compatible API with streaming
 - **Channels & DMs** — @mention agents in shared channels or chat 1-on-1; each channel runs isolated sessions
+- **Streaming Responses** — API agent and CLI summarizer output streams live in chat with a blinking cursor
 - **Image Support** — Paste or attach images; sent as Vision API content (API agents) or file paths (CLI agents)
 - **Smart Output** — xterm-headless extracts clean screen content from TUI tools; optional LLM summarizer refines it further
 - **Resizable Terminals** — Per-channel terminal panels with tabs, drag-to-resize, and persistent xterm state
-- **Memory** — Agent-private and channel-shared memory capsules with automatic recall and retain
+- **Memory** — Memvid .mv2 capsules with lexical + semantic search, auto-eviction when capacity is reached
+- **Clear Chat** — One-click clear messages and channel memory from the channel header
 
 ## Quick Start
 
@@ -91,6 +93,8 @@ The directory structure should look like:
 
 AgentCrew detects the model automatically on startup. No API key or internet connection is needed — the model runs entirely on your machine.
 
+Memory has a 50 MB capacity per capsule (free tier). When capacity is low, the oldest entries are automatically evicted to make room for new ones.
+
 ## CLI Agent Turn Detection
 
 AgentCrew detects when a CLI agent's turn is complete using two signals:
@@ -111,7 +115,7 @@ src/
 │   ├── message-router.ts         — @mention dispatch, turn detection, summarizer, memory
 │   ├── api-client.ts             — OpenAI-compatible SSE streaming client
 │   ├── cli-detector.ts           — Auto-detect installed CLI tools
-│   ├── memory-service.ts         — Dual capsule recall/retain (Memvid shim)
+│   ├── memory-service.ts         — @memvid/sdk dual-mode recall/retain with auto-eviction
 │   └── database/
 │       ├── schema.ts             — SQLite tables (agents, channels, messages, settings, ...)
 │       ├── repository.ts         — Full CRUD for all entities
@@ -129,11 +133,25 @@ src/
 │           ├── ChatView/         — Timeline, @mention input, multi-tab terminal panel
 │           ├── Modals/           — Create/Edit Agent/Channel with icon picker
 │           ├── Settings/         — Account + Summarizer tabs
-│           ├── AgentIcon.tsx     — Lucide icon mapper (20 icons)
+│           ├── AgentIcon.tsx     — Lucide icon mapper (14 icons)
 │           └── IconPicker.tsx    — Icon selection grid
 └── shared/
     ├── types.ts                  — All domain interfaces
     └── ipc-channels.ts           — IPC channel constants
+```
+
+## Data Storage
+
+All application data is stored under `~/.agentcrew/` for easy backup and migration:
+
+```
+~/.agentcrew/
+├── sqlite/          # SQLite database
+│   └── agentcrew.db
+├── memvid/
+│   └── capsules/    # Memory .mv2 files (agent-private + channel-shared)
+├── models/          # Local embedding models (optional, for semantic search)
+└── uploads/         # Image attachments
 ```
 
 ## Data Model

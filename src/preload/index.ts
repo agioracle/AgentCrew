@@ -47,6 +47,8 @@ const api = {
       ipcRenderer.invoke(IPC.MESSAGES_LIST, channelId, limit, before),
     create: (draft: MessageDraft): Promise<MessageRecord> =>
       ipcRenderer.invoke(IPC.MESSAGES_CREATE, draft),
+    clear: (channelId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.MESSAGES_CLEAR, channelId),
     onStream: (callback: (msg: MessageRecord) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, msg: MessageRecord) => callback(msg)
       ipcRenderer.on(IPC.MESSAGES_STREAM, listener)

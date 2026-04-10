@@ -73,6 +73,7 @@ export interface AppState {
   // Message actions
   sendMessage: (draft: MessageDraft) => Promise<MessageRecord>
   appendMessage: (msg: MessageRecord) => void
+  clearMessages: (channelId: string) => Promise<void>
 }
 
 // ─── Store ───────────────────────────────────────────────
@@ -191,11 +192,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateAgent: async (id, draft) => {
     await window.api.agents.update(id, draft)
     await get().refreshAgents()
+    // Sync DM channel name if agent name changed
+    if (draft.name) {
+      const dmChannel = get().channels.find(ch => ch.isDm && ch.memberIds.length === 1 && ch.memberIds[0] === id)
+      if (dmChannel && dmChannel.name !== draft.name) {
+        await window.api.channels.update(dmChannel.id, { name: draft.name })
+        await get().refreshChannels()
+      }
+    }
   },
   deleteAgent: async (id) => {
+    // Delete DM channels for this agent before deleting the agent
+    const dmChannels = get().channels.filter(ch => ch.isDm && ch.memberIds.length === 1 && ch.memberIds[0] === id)
+    for (const dm of dmChannels) {
+      await window.api.channels.delete(dm.id)
+    }
     await window.api.agents.delete(id)
     await get().refreshAgents()
     await get().refreshChannels()
+    // If active channel was deleted, switch to first available
+    if (dmChannels.some(dm => dm.id === get().activeChannelId)) {
+      const { channels } = get()
+      if (channels.length > 0) {
+        get().setActiveChannel(channels[0].id)
+      } else {
+        set({ activeChannelId: null, messages: [] })
+      }
+    }
   },
 
   // Channel
@@ -244,5 +267,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         streamingMessages: streamKey ? restStreaming : s.streamingMessages,
       }
     })
+  },
+  clearMessages: async (channelId) => {
+    await window.api.messages.clear(channelId)
+    if (get().activeChannelId === channelId) {
+      set({ messages: [], hasMoreMessages: false })
+    }
   },
 }))

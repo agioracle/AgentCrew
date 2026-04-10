@@ -3,7 +3,7 @@ import { useAppStore } from '../../store/app-store'
 import { MessageTimeline } from './MessageTimeline'
 import { MessageInput } from './MessageInput'
 import { TerminalPanel } from './TerminalPanel'
-import { Terminal, Settings, Users } from 'lucide-react'
+import { Terminal, Settings, Users, Trash2 } from 'lucide-react'
 import './ChatView.css'
 
 const DEFAULT_TERMINAL_HEIGHT = 260
@@ -21,6 +21,7 @@ export function ChatView() {
   const thinkingAgents = useAppStore(s => s.thinkingAgents)
   const streamingMessages = useAppStore(s => s.streamingMessages)
   const openModal = useAppStore(s => s.openModal)
+  const clearMessages = useAppStore(s => s.clearMessages)
   const terminalOpenMap = useAppStore(s => s.terminalOpen)
   const toggleTerminal = useAppStore(s => s.toggleTerminal)
 
@@ -195,6 +196,17 @@ export function ChatView() {
               </button>
             </>
           )}
+          <button
+            className="icon-btn"
+            onClick={() => {
+              if (activeChannelId && confirm('Clear all messages and memory for this channel?')) {
+                clearMessages(activeChannelId)
+              }
+            }}
+            title="Clear Chat & Memory"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       </div>
 

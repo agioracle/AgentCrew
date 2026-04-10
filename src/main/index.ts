@@ -56,6 +56,7 @@ async function bootstrap(): Promise<void> {
     repository,
     ptyManager,
     messageRouter,
+    memoryService,
     cliDetector,
     getMainWindow
   })

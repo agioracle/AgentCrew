@@ -64,26 +64,6 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-scroll">
-        {/* Channels (group) */}
-        <div className="sidebar-section">
-          <div className="section-header">
-            <span>CHANNELS {groupChannels.length}</span>
-            <button className="icon-btn" onClick={() => openModal('createChannel')} title="Create Channel">
-              <Plus size={14} />
-            </button>
-          </div>
-          {groupChannels.map(ch => (
-            <div
-              key={ch.id}
-              className={`sidebar-item ${ch.id === activeChannelId ? 'active' : ''}`}
-              onClick={() => setActiveChannel(ch.id)}
-            >
-              <Hash size={14} className="item-icon" />
-              <span className="item-label">{ch.name}</span>
-            </div>
-          ))}
-        </div>
-
         {/* Direct Messages */}
         <div className="sidebar-section">
           <div className="section-header">
@@ -114,6 +94,26 @@ export function Sidebar() {
               </div>
             )
           })}
+        </div>
+
+        {/* Channels (group) */}
+        <div className="sidebar-section">
+          <div className="section-header">
+            <span>CHANNELS {groupChannels.length}</span>
+            <button className="icon-btn" onClick={() => openModal('createChannel')} title="Create Channel">
+              <Plus size={14} />
+            </button>
+          </div>
+          {groupChannels.map(ch => (
+            <div
+              key={ch.id}
+              className={`sidebar-item ${ch.id === activeChannelId ? 'active' : ''}`}
+              onClick={() => setActiveChannel(ch.id)}
+            >
+              <Hash size={14} className="item-icon" />
+              <span className="item-label">{ch.name}</span>
+            </div>
+          ))}
         </div>
 
         {/* Agents */}

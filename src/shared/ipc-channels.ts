@@ -21,6 +21,7 @@ export const IPC = {
   // Messages
   MESSAGES_LIST: 'messages:list',
   MESSAGES_CREATE: 'messages:create',
+  MESSAGES_CLEAR: 'messages:clear', // clear all messages in a channel
   MESSAGES_STREAM: 'messages:stream', // agent reply streaming
 
   // MCP

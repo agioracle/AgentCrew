@@ -4,6 +4,7 @@ import type { AgentCrewRepository } from './database/repository'
 import type { PtyManager } from './pty-manager'
 import type { MessageRouter } from './message-router'
 import type { CliDetector } from './cli-detector'
+import type { MemoryService } from './memory-service'
 import type { AgentDraft, ChannelDraft, MessageDraft, McpServerDraft, SkillDraft, CliRuntime } from '../shared/types'
 import { randomUUID } from 'crypto'
 import { homedir } from 'os'
@@ -14,12 +15,13 @@ export interface IpcContext {
   repository: AgentCrewRepository
   ptyManager: PtyManager
   messageRouter: MessageRouter
+  memoryService: MemoryService
   cliDetector: CliDetector
   getMainWindow: () => import('electron').BrowserWindow | null
 }
 
 export function registerIpcHandlers(ctx: IpcContext): void {
-  const { repository, ptyManager, messageRouter, cliDetector, getMainWindow } = ctx
+  const { repository, ptyManager, messageRouter, memoryService, cliDetector, getMainWindow } = ctx
 
   // Bootstrap
   ipcMain.handle(IPC.BOOTSTRAP, () => {
@@ -62,6 +64,16 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC.MESSAGES_CREATE, async (_e, draft: MessageDraft) => {
     // routeMessage creates the message, broadcasts via MESSAGES_STREAM, and dispatches to agents
     await messageRouter.routeMessage(draft)
+  })
+  ipcMain.handle(IPC.MESSAGES_CLEAR, async (_e, channelId: string) => {
+    // Clear all messages in the channel
+    repository.clearMessages(channelId)
+    // Remove channel shared memory capsule
+    // Agent private memory is NOT deleted — it may contain memories from other channels
+    const channel = repository.getChannel(channelId)
+    if (channel.memoryCapsuleId) {
+      await memoryService.removeCapsule(channel.memoryCapsuleId)
+    }
   })
 
   // PTY

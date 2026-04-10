@@ -297,7 +297,9 @@ export class AgentCrewRepository {
     })
     return mapMessage(this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Record<string, unknown>)
   }
-
+  clearMessages(channelId: string): void {
+    this.db.prepare('DELETE FROM messages WHERE channel_id = ?').run(channelId)
+  }
 
   // ── MCP Servers ──
   listMcpServers(): McpServerRecord[] {

@@ -63,6 +63,11 @@ function detectEmbeddingModel(modelsDir: string): string | null {
 
 // ── Service ─────────────────────────────────────────────
 
+// Evict oldest frames when capacity is below this threshold (5 MB)
+const CAPACITY_THRESHOLD = 5 * 1024 * 1024
+// Number of oldest frames to evict per cleanup cycle
+const EVICT_BATCH_SIZE = 20
+
 export class MemoryService {
   private readonly capsuleDir: string
   private readonly modelsDir: string
@@ -106,7 +111,7 @@ export class MemoryService {
       ? `agent-${input.agentId ?? 'unknown'}`
       : `channel-${input.channelId}`
 
-    await mem.put({
+    const putData = {
       text: input.content,
       title,
       label: input.scope,
@@ -120,7 +125,23 @@ export class MemoryService {
         enableEmbedding: true,
         embeddingModel: this.embeddingModel,
       } : {}),
-    })
+    }
+
+    try {
+      await mem.put(putData)
+    } catch (err: any) {
+      // If capacity exceeded, evict oldest entries and retry
+      if (err?.code === 'MV003' || err?.message?.includes('capacity')) {
+        console.log(`[Memory] Capacity reached for ${input.capsuleId}, evicting oldest entries...`)
+        await this.evictOldest(mem, input.capsuleId)
+        await mem.put(putData)
+      } else {
+        throw err
+      }
+    }
+
+    // Proactive check: evict if remaining capacity is low
+    await this.evictIfNeeded(mem, input.capsuleId)
   }
 
   async recall(input: RecallInput): Promise<RecallItem[]> {
@@ -223,6 +244,39 @@ export class MemoryService {
   }
 
   // ── Internal ────────────────────────────────────────────
+
+  /** Proactively evict oldest entries if remaining capacity is below threshold */
+  private async evictIfNeeded(mem: Memvid, capsuleId: string): Promise<void> {
+    try {
+      const stats = await mem.stats() as any
+      const remaining = stats.remaining_capacity_bytes ?? Infinity
+      if (remaining < CAPACITY_THRESHOLD) {
+        console.log(`[Memory] ${capsuleId}: ${(remaining / 1024 / 1024).toFixed(1)} MB remaining, evicting oldest entries...`)
+        await this.evictOldest(mem, capsuleId)
+      }
+    } catch { /* stats failed, skip proactive eviction */ }
+  }
+
+  /** Remove the oldest N frames from a capsule */
+  private async evictOldest(mem: Memvid, capsuleId: string): Promise<void> {
+    try {
+      // Get oldest frames (chronological order, oldest first)
+      const entries = await mem.timeline({ limit: EVICT_BATCH_SIZE, reverse: false }) as any[]
+      if (!entries || entries.length === 0) return
+
+      let removed = 0
+      for (const entry of entries) {
+        const frameId = String(entry.frame_id)
+        try {
+          await mem.remove(frameId)
+          removed++
+        } catch { /* skip individual frame errors */ }
+      }
+      console.log(`[Memory] Evicted ${removed} oldest entries from ${capsuleId}`)
+    } catch (err) {
+      console.error(`[Memory] Eviction failed for ${capsuleId}:`, err)
+    }
+  }
 
   private capsulePath(capsuleId: string): string {
     return path.join(this.capsuleDir, `${capsuleId}.mv2`)
