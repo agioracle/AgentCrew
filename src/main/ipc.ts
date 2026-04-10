@@ -122,8 +122,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC.SETTINGS_DELETE, (_e, key: string) => repository.deleteSetting(key))
 
   // Upload — save base64 image to disk, return absolute path
-  const uploadsDir = resolve(homedir(), '.agentcrew', 'uploads')
-  mkdirSync(uploadsDir, { recursive: true })
+  const attachmentsDir = resolve(homedir(), '.agentcrew', 'attachments')
+  mkdirSync(attachmentsDir, { recursive: true })
 
   ipcMain.handle(IPC.UPLOAD_IMAGE, (_e, base64DataUrl: string, filename: string) => {
     // base64DataUrl: "data:image/png;base64,iVBOR..."
@@ -132,7 +132,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
     const buffer = Buffer.from(match[2], 'base64')
     const safeName = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
-    const filePath = resolve(uploadsDir, safeName)
+    const filePath = resolve(attachmentsDir, safeName)
     writeFileSync(filePath, buffer)
     console.log(`[IPC] Saved image: ${filePath} (${buffer.length} bytes)`)
     return filePath

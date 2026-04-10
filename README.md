@@ -3,6 +3,8 @@
 
 AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents collaborate to build wonderful things directly on your local machine. No code leaves your device, and no context is lost.
 
+![agentcrew screenshot](./agentcrew.png)
+
 ## Core Philosophy
 
 - **Human as Manager** — You dispatch every task. Agents never talk to each other autonomously. You stay in control.
@@ -64,7 +66,7 @@ You can send images to agents by:
 - Clicking the **paperclip button** in the chat input to select image files
 - **Pasting** from clipboard (Ctrl+V / Cmd+V) — e.g. screenshots
 
-Images are saved to `~/.agentcrew/uploads/` and forwarded differently depending on the agent type:
+Images are saved to `~/.agentcrew/attachments/` and forwarded differently depending on the agent type:
 
 | Agent Type | How images are sent |
 |------------|-------------------|
@@ -151,7 +153,7 @@ All application data is stored under `~/.agentcrew/` for easy backup and migrati
 ├── memvid/
 │   └── capsules/    # Memory .mv2 files (agent-private + channel-shared)
 ├── models/          # Local embedding models (optional, for semantic search)
-└── uploads/         # Image attachments
+└── attachments/     # Image attachments
 ```
 
 ## Data Model
