@@ -23,6 +23,11 @@ AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents c
 - **Memory** — Memvid .mv2 capsules with lexical + semantic search, auto-eviction when capacity is reached
 - **Clear Chat** — One-click clear messages and channel memory from the channel header
 
+## Roadmap
+
+- [ ] Agent as Manager
+
+
 ## Quick Start
 
 Requires Node.js 20+ and npm.
