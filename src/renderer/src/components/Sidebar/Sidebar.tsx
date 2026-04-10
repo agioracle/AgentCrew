@@ -98,7 +98,12 @@ export function Sidebar() {
               <div
                 key={ch.id}
                 className={`sidebar-item ${ch.id === activeChannelId ? 'active' : ''}`}
-                onClick={() => setActiveChannel(ch.id)}
+                onClick={() => {
+                  setActiveChannel(ch.id)
+                  if (agent?.type === 'cli') {
+                    window.api.cli.startSession(agent.id, ch.id)
+                  }
+                }}
               >
                 {agent ? (
                   <AgentIcon icon={agent.icon ?? 'bot'} size={14} />

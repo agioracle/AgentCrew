@@ -108,6 +108,7 @@ export function MessageTimeline() {
   const messages = useAppStore(s => s.messages)
   const agents = useAppStore(s => s.agents)
   const thinkingAgents = useAppStore(s => s.thinkingAgents)
+  const streamingMessages = useAppStore(s => s.streamingMessages)
   const activeChannelId = useAppStore(s => s.activeChannelId)
 
   if (messages.length === 0) {
@@ -141,6 +142,27 @@ export function MessageTimeline() {
           <MessageBubble key={item.msg.id} message={item.msg} />
         )
       )}
+      {/* Streaming messages (API agent chunks / CLI summarizer streaming) */}
+      {Object.entries(streamingMessages)
+        .filter(([key]) => key.endsWith(`:${activeChannelId}`))
+        .map(([key, { agentId, content }]) => {
+          const agent = agents.find(a => a.id === agentId)
+          return (
+            <div key={`streaming-${key}`} className="message-bubble">
+              <div className="message-avatar">
+                <div className="avatar avatar-agent"><AgentIcon icon={agent?.icon ?? 'bot'} size={16} /></div>
+              </div>
+              <div className="message-body">
+                <div className="message-meta">
+                  <span className="message-sender">{agent?.name ?? 'agent'}</span>
+                  <span className="message-role">agent</span>
+                </div>
+                <div className="message-content">{content}<span className="streaming-cursor">▍</span></div>
+              </div>
+            </div>
+          )
+        })
+      }
       {/* Thinking indicators for agents currently processing in this channel */}
       {Object.entries(thinkingAgents)
         .filter(([key]) => key.endsWith(`:${activeChannelId}`))

@@ -33,6 +33,8 @@ async function bootstrap(): Promise<void> {
 
   // Memory Service
   const memoryService = new MemoryService()
+  // Probe for local models in background (don't block startup)
+  memoryService.probeModels().catch(err => console.error('[Memory] probeModels failed:', err))
 
   // CLI Detector
   const cliDetector = new CliDetector()
@@ -86,6 +88,7 @@ async function bootstrap(): Promise<void> {
   // Cleanup
   app.on('before-quit', () => {
     ptyManager?.destroyAll()
+    memoryService.closeAll().catch(err => console.error('[Memory] closeAll failed:', err))
     try { db.close() } catch { /* ignore */ }
   })
 }

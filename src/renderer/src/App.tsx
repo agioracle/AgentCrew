@@ -39,7 +39,8 @@ export default function App() {
         const key = `${msg.agentId}:${msg.channelId}`
         useAppStore.getState().setAgentThinking(key, msg.verb)
       } else if (msg.type === 'agent-stream-chunk') {
-        // API streaming chunks — handled elsewhere
+        const key = `${msg.agentId}:${msg.channelId}`
+        useAppStore.getState().setStreamingMessage(key, msg.agentId, msg.channelId, msg.fullText)
       } else {
         useAppStore.getState().appendMessage(msg)
       }

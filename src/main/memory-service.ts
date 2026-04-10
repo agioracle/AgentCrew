@@ -1,30 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync } from 'fs'
 import { homedir } from 'os'
 import path from 'path'
+import { create, use } from '@memvid/sdk'
+// Memvid type — re-exported via @memvid/sdk index
+type Memvid = Awaited<ReturnType<typeof create>>
 
-interface MemoryEntry {
-  id: string
-  content: string
-  scope: 'agent' | 'shared'
-  agentId: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-  uri: string
-}
+// ── Types (public interface unchanged) ──────────────────
 
-interface CapsulePayload {
-  entries: MemoryEntry[]
-}
-
-interface RecallItem {
-  id: string
-  content: string
-  scope: 'agent' | 'shared'
-  score: number
-  createdAt: string
-}
-
-interface RetainInput {
+export interface RetainInput {
   capsuleId: string
   channelId: string
   content: string
@@ -33,155 +16,230 @@ interface RetainInput {
   metadata?: Record<string, unknown>
 }
 
-interface RecallInput {
+export interface RecallInput {
   channelCapsuleId: string
   agentCapsuleId: string
   agentId: string
   query: string
 }
 
-function now(): string {
-  return new Date().toISOString()
+export interface RecallItem {
+  id: string
+  content: string
+  scope: 'agent' | 'shared'
+  score: number
+  createdAt: string
 }
 
-function tokenize(query: string): string[] {
-  return query.toLowerCase().split(/[^a-z0-9_:-]+/).filter(Boolean)
-}
+// ── Model detection ─────────────────────────────────────
 
-function scoreEntry(entry: MemoryEntry, query: string, agentId: string): number {
-  const haystack = [entry.content, entry.uri, ...Object.values(entry.metadata).map(String)].join(' ').toLowerCase()
-  let score = entry.scope === 'shared' ? 0.18 : 0.24
-  for (const token of tokenize(query)) {
-    if (haystack.includes(token)) score += 0.17
-  }
-  if (entry.agentId === agentId) score += 0.08
-  const ageHours = Math.max(0, (Date.now() - Date.parse(entry.createdAt)) / 3_600_000)
-  score += Math.max(0, 0.06 - ageHours * 0.001)
-  return Number(score.toFixed(3))
-}
+// Map: model directory prefix → memvid embeddingModel name
+// Directory names follow HuggingFace cache convention: models--{org}--{model}
+const KNOWN_EMBEDDING_MODELS: Array<{ dirPrefix: string; name: string }> = [
+  { dirPrefix: 'models--Xenova--bge-small-en',     name: 'bge-small' },
+  { dirPrefix: 'models--Xenova--bge-base-en',      name: 'bge-base' },
+  { dirPrefix: 'models--nomic-ai--nomic-embed',    name: 'nomic' },
+  { dirPrefix: 'models--Xenova--gte-large',        name: 'gte-large' },
+]
 
 /**
- * Simplified MemvidService using JSON shim capsules.
- * When @memvid/sdk is available, it can be upgraded to use native .mv2 files.
- * For now, this provides the dual-capsule topology with lexical recall.
+ * Scan a directory for known embedding model directories.
+ * Returns the first matching model name, or null if none found.
  */
+function detectEmbeddingModel(modelsDir: string): string | null {
+  let dirs: string[]
+  try {
+    dirs = readdirSync(modelsDir)
+  } catch {
+    return null
+  }
+  for (const known of KNOWN_EMBEDDING_MODELS) {
+    if (dirs.some(d => d.startsWith(known.dirPrefix))) {
+      return known.name
+    }
+  }
+  return null
+}
+
+// ── Service ─────────────────────────────────────────────
+
 export class MemoryService {
   private readonly capsuleDir: string
+  private readonly modelsDir: string
+  private embeddingModel: string | null = null // null = lex only
+  private capsules = new Map<string, Memvid>()
 
-  constructor(capsuleDir?: string) {
+  constructor(capsuleDir?: string, modelsDir?: string) {
     this.capsuleDir = capsuleDir ?? path.join(homedir(), '.agentcrew', 'memvid', 'capsules')
+    this.modelsDir = modelsDir ?? path.join(homedir(), '.agentcrew', 'models')
     mkdirSync(this.capsuleDir, { recursive: true })
+    mkdirSync(this.modelsDir, { recursive: true })
+
+    // Prevent auto-download; models must be pre-installed
+    process.env.MEMVID_OFFLINE = '1'
+    process.env.MEMVID_MODELS_DIR = this.modelsDir
   }
 
-  /** Ensure a capsule file exists */
-  ensureCapsule(capsuleId: string): void {
-    const filePath = this.capsulePath(capsuleId)
-    if (!existsSync(filePath)) {
-      this.writeCapsule(filePath, { entries: [] })
+  /** Detect locally available embedding model. */
+  async probeModels(): Promise<void> {
+    this.embeddingModel = detectEmbeddingModel(this.modelsDir)
+    if (this.embeddingModel) {
+      console.log(`[Memory] Embedding model found: ${this.embeddingModel}, search mode: lex+sem`)
+    } else {
+      console.log('[Memory] No local embedding model found, search mode: lex')
     }
   }
 
-  /** Write a memory entry to a capsule */
-  retain(input: RetainInput): void {
-    this.ensureCapsule(input.capsuleId)
-    const filePath = this.capsulePath(input.capsuleId)
-    const capsule = this.readCapsule(filePath)
+  get hasEmbedding(): boolean {
+    return this.embeddingModel !== null
+  }
 
-    const entryId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-    const entry: MemoryEntry = {
-      id: entryId,
-      content: input.content,
-      scope: input.scope,
-      agentId: input.scope === 'agent' ? (input.agentId ?? null) : null,
+  // ── Public API ──────────────────────────────────────────
+
+  async ensureCapsule(capsuleId: string): Promise<void> {
+    await this.openCapsule(capsuleId)
+  }
+
+  async retain(input: RetainInput): Promise<void> {
+    const mem = await this.openCapsule(input.capsuleId)
+    const title = input.scope === 'agent'
+      ? `agent-${input.agentId ?? 'unknown'}`
+      : `channel-${input.channelId}`
+
+    await mem.put({
+      text: input.content,
+      title,
+      label: input.scope,
       metadata: {
-        ...input.metadata,
         channelId: input.channelId,
+        agentId: input.agentId ?? null,
         capsuleId: input.capsuleId,
+        ...input.metadata,
       },
-      createdAt: now(),
-      uri: input.scope === 'shared'
-        ? `mv2://channels/${input.channelId}/${entryId}`
-        : `mv2://agents/${input.agentId ?? 'unknown'}/${entryId}`,
-    }
-
-    capsule.entries.unshift(entry)
-    capsule.entries = capsule.entries.slice(0, 500) // cap at 500 entries
-    this.writeCapsule(filePath, capsule)
+      ...(this.embeddingModel ? {
+        enableEmbedding: true,
+        embeddingModel: this.embeddingModel,
+      } : {}),
+    })
   }
 
-  /** Recall relevant memories for an agent in a channel context */
-  recall(input: RecallInput): RecallItem[] {
-    this.ensureCapsule(input.agentCapsuleId)
-    this.ensureCapsule(input.channelCapsuleId)
+  async recall(input: RecallInput): Promise<RecallItem[]> {
+    const agentMem = await this.openCapsule(input.agentCapsuleId)
+    const channelMem = await this.openCapsule(input.channelCapsuleId)
 
-    const agentCapsule = this.readCapsule(this.capsulePath(input.agentCapsuleId))
-    const channelCapsule = this.readCapsule(this.capsulePath(input.channelCapsuleId))
+    const agentScope = `agent-${input.agentId}`
 
-    // Score agent private entries
-    const agentHits = agentCapsule.entries
-      .filter(e => e.scope === 'agent' && e.agentId === input.agentId)
-      .map(e => ({
-        id: e.id,
-        content: e.content,
-        scope: e.scope,
-        score: scoreEntry(e, input.query, input.agentId),
-        createdAt: e.createdAt
-      }))
+    // Build search tasks — always lex; add sem if embedding model is available.
+    // Strategy: sem results first (higher quality), lex fills remaining slots.
+    // This ensures both old entries (no embedding) and new entries are searchable.
+    const lexTasks = [
+      { mem: agentMem, scope: 'agent' as const, filterScope: agentScope },
+      { mem: channelMem, scope: 'shared' as const, filterScope: undefined },
+    ]
+    const semTasks = this.embeddingModel ? [
+      { mem: agentMem, scope: 'agent' as const, filterScope: agentScope },
+      { mem: channelMem, scope: 'shared' as const, filterScope: undefined },
+    ] : []
 
-    // Score channel shared entries
-    const channelHits = channelCapsule.entries
-      .filter(e => e.scope === 'shared')
-      .map(e => ({
-        id: e.id,
-        content: e.content,
-        scope: e.scope,
-        score: scoreEntry(e, input.query, input.agentId),
-        createdAt: e.createdAt
-      }))
+    // Execute all searches in parallel
+    const [lexResults, semResults] = await Promise.all([
+      Promise.all(lexTasks.map(({ mem, filterScope }) =>
+        mem.find(input.query, { k: 3, mode: 'lex' as const, ...(filterScope ? { scope: filterScope } : {}) })
+          .catch(() => null)
+      )),
+      Promise.all(semTasks.map(({ mem, filterScope }) =>
+        mem.find(input.query, { k: 3, mode: 'sem' as const, ...(filterScope ? { scope: filterScope } : {}) })
+          .catch(() => null)
+      )),
+    ])
 
-    // Merge, deduplicate, sort by score, take top 3
-    const all = [...agentHits, ...channelHits]
-      .sort((a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt))
-
+    // Merge: sem first, lex fills remaining — deduplicate by (scope + frame_id)
+    const TOP_K = 3
+    const items: RecallItem[] = []
     const seen = new Set<string>()
-    const result: RecallItem[] = []
-    for (const item of all) {
-      if (seen.has(item.id)) continue
-      seen.add(item.id)
-      result.push(item)
-      if (result.length >= 3) break
+
+    const addHits = (result: Awaited<ReturnType<Memvid['find']>> | null, scope: 'agent' | 'shared') => {
+      if (!result) return
+      for (const hit of result.hits) {
+        if (items.length >= TOP_K) return
+        const key = `${scope}:${hit.frame_id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        items.push({
+          id: String(hit.frame_id),
+          content: hit.snippet || hit.title,
+          scope,
+          score: hit.score,
+          createdAt: hit.created_at,
+        })
+      }
     }
 
-    return result
+    // 1. sem results first (higher quality)
+    for (let i = 0; i < semTasks.length; i++) {
+      addHits(semResults[i], semTasks[i].scope)
+    }
+    // 2. lex fills remaining slots
+    for (let i = 0; i < lexTasks.length; i++) {
+      addHits(lexResults[i], lexTasks[i].scope)
+    }
+
+    return items
   }
 
-  /** Get capsule entry count */
-  getEntryCount(capsuleId: string): number {
-    const filePath = this.capsulePath(capsuleId)
-    if (!existsSync(filePath)) return 0
-    return this.readCapsule(filePath).entries.length
+  async getEntryCount(capsuleId: string): Promise<number> {
+    try {
+      const mem = await this.openCapsule(capsuleId)
+      const stats = await mem.stats()
+      return (stats as any).frame_count ?? 0
+    } catch {
+      return 0
+    }
   }
 
-  /** Remove a capsule file */
-  removeCapsule(capsuleId: string): void {
+  async removeCapsule(capsuleId: string): Promise<void> {
+    const mem = this.capsules.get(capsuleId)
+    if (mem) {
+      try { await mem.seal() } catch { /* ignore */ }
+      this.capsules.delete(capsuleId)
+    }
     const filePath = this.capsulePath(capsuleId)
-    rmSync(filePath, { force: true })
+    try {
+      const { rmSync } = await import('fs')
+      rmSync(filePath, { force: true })
+    } catch { /* ignore */ }
   }
+
+  async closeAll(): Promise<void> {
+    for (const [id, mem] of this.capsules) {
+      try {
+        await mem.seal()
+      } catch (err) {
+        console.error(`[Memory] Failed to seal capsule ${id}:`, err)
+      }
+    }
+    this.capsules.clear()
+    console.log('[Memory] All capsules sealed')
+  }
+
+  // ── Internal ────────────────────────────────────────────
 
   private capsulePath(capsuleId: string): string {
-    return path.join(this.capsuleDir, `${capsuleId}.json`)
+    return path.join(this.capsuleDir, `${capsuleId}.mv2`)
   }
 
-  private readCapsule(filePath: string): CapsulePayload {
-    if (!existsSync(filePath)) return { entries: [] }
-    try {
-      return JSON.parse(readFileSync(filePath, 'utf8')) as CapsulePayload
-    } catch {
-      return { entries: [] }
+  private async openCapsule(capsuleId: string): Promise<Memvid> {
+    const existing = this.capsules.get(capsuleId)
+    if (existing) return existing
+
+    const filePath = this.capsulePath(capsuleId)
+    let mem: Memvid
+    if (existsSync(filePath)) {
+      mem = await use('basic', filePath)
+    } else {
+      mem = await create(filePath, 'basic')
     }
-  }
-
-  private writeCapsule(filePath: string, payload: CapsulePayload): void {
-    writeFileSync(filePath, JSON.stringify(payload, null, 2) + '\n', 'utf8')
+    this.capsules.set(capsuleId, mem)
+    return mem
   }
 }

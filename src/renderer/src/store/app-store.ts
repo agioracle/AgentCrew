@@ -27,6 +27,8 @@ export interface AppState {
   agents: AgentRecord[]
   channels: ChannelWithMembers[]
   messages: MessageRecord[]
+  hasMoreMessages: boolean
+  loadingOlder: boolean
 
   // UI
   activeChannelId: string | null
@@ -37,6 +39,7 @@ export interface AppState {
   agentPtyMap: Record<string, string> // "agentId:channelId" -> ptyId
   activeTerminalAgentId: string | null
   thinkingAgents: Record<string, string> // "agentId:channelId" -> thinking verb
+  streamingMessages: Record<string, { agentId: string; channelId: string; content: string }> // "agentId:channelId" -> streaming content
   initialized: boolean
 
   // Actions
@@ -44,6 +47,7 @@ export interface AppState {
   refreshAgents: () => Promise<void>
   refreshChannels: () => Promise<void>
   loadMessages: (channelId: string) => Promise<void>
+  loadOlderMessages: () => Promise<void>
   setActiveChannel: (id: string) => void
   openModal: (modal: ModalType, data?: unknown) => void
   closeModal: () => void
@@ -52,6 +56,8 @@ export interface AppState {
   setAgentPty: (key: string, ptyId: string) => void
   setActiveTerminalAgent: (agentId: string) => void
   setAgentThinking: (key: string, verb: string | null) => void
+  setStreamingMessage: (key: string, agentId: string, channelId: string, content: string) => void
+  clearStreamingMessage: (key: string) => void
 
   // Agent actions
   createAgent: (draft: AgentDraft) => Promise<AgentRecord>
@@ -75,6 +81,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   agents: [],
   channels: [],
   messages: [],
+  hasMoreMessages: false,
+  loadingOlder: false,
   activeChannelId: null,
   activeModal: null,
   modalData: null,
@@ -83,6 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   agentPtyMap: {},
   activeTerminalAgentId: null,
   thinkingAgents: {},
+  streamingMessages: {},
   initialized: false,
 
   initialize: async () => {
@@ -120,12 +129,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadMessages: async (channelId: string) => {
-    const messages = await window.api.messages.list(channelId, 100)
-    set({ messages })
+    const PAGE_SIZE = 20
+    const messages = await window.api.messages.list(channelId, PAGE_SIZE)
+    set({ messages, hasMoreMessages: messages.length >= PAGE_SIZE })
+  },
+
+  loadOlderMessages: async () => {
+    const { activeChannelId, messages, hasMoreMessages, loadingOlder } = get()
+    if (!activeChannelId || !hasMoreMessages || messages.length === 0 || loadingOlder) return
+    const PAGE_SIZE = 20
+    const oldest = messages[0]
+    set({ loadingOlder: true })
+    try {
+      const older = await window.api.messages.list(activeChannelId, PAGE_SIZE, oldest.createdAt)
+      if (older.length === 0) {
+        set({ hasMoreMessages: false, loadingOlder: false })
+        return
+      }
+      set(s => ({
+        messages: [...older, ...s.messages],
+        hasMoreMessages: older.length >= PAGE_SIZE,
+        loadingOlder: false,
+      }))
+    } catch {
+      set({ loadingOlder: false })
+    }
   },
 
   setActiveChannel: (id: string) => {
-    set({ activeChannelId: id, messages: [] })
+    set({ activeChannelId: id, messages: [], hasMoreMessages: false })
     get().loadMessages(id)
   },
 
@@ -141,6 +173,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { thinkingAgents: rest }
     }
     return { thinkingAgents: { ...s.thinkingAgents, [key]: verb } }
+  }),
+  setStreamingMessage: (key, agentId, channelId, content) => set(s => ({
+    streamingMessages: { ...s.streamingMessages, [key]: { agentId, channelId, content } }
+  })),
+  clearStreamingMessage: (key) => set(s => {
+    const { [key]: _, ...rest } = s.streamingMessages
+    return { streamingMessages: rest }
   }),
 
   // Agent
@@ -188,15 +227,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Message
   sendMessage: async (draft) => {
+    // routeMessage creates the message and broadcasts it via MESSAGES_STREAM,
+    // which appendMessage picks up — no need to reload or manually append here.
     await window.api.messages.create(draft)
-    await get().loadMessages(draft.channelId)
     return get().messages[get().messages.length - 1]
   },
   appendMessage: (msg) => {
     set(s => {
       if (msg.channelId !== s.activeChannelId) return s
       if (s.messages.some(m => m.id === msg.id)) return s
-      return { messages: [...s.messages, msg] }
+      // Clear streaming message for this agent+channel when final message arrives
+      const streamKey = msg.senderId ? `${msg.senderId}:${msg.channelId}` : ''
+      const { [streamKey]: _, ...restStreaming } = s.streamingMessages
+      return {
+        messages: [...s.messages, msg],
+        streamingMessages: streamKey ? restStreaming : s.streamingMessages,
+      }
     })
   },
 }))

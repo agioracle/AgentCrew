@@ -289,6 +289,18 @@
   40% { opacity: 1; }
 }
 
+/* ── Streaming Cursor ────────────────────────────────────── */
+
+.streaming-cursor {
+  animation: streaming-blink 1s step-end infinite;
+  color: var(--accent);
+  font-weight: 300;
+}
+
+@keyframes streaming-blink {
+  50% { opacity: 0; }
+}
+
 /* ── Terminal Panel ────────────────────────────────────── */
 
 .terminal-drag-handle {

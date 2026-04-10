@@ -17,6 +17,7 @@
     "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "@memvid/sdk": "^2.0.159",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/headless": "^6.0.0",

@@ -71,6 +71,26 @@ Images are saved to `~/.agentcrew/uploads/` and forwarded differently depending 
 
 CLI tools like Claude Code and Gemini CLI can read image files from the provided paths. Images are displayed as thumbnails in the chat message bubble.
 
+## Memory
+
+AgentCrew uses [Memvid](https://memvid.com) `.mv2` files for agent memory — each agent and channel has its own capsule with automatic recall and retain.
+
+By default, memory search uses **lexical mode** (BM25 full-text search). To enable **semantic search** for better recall quality, download the embedding model and place it in the models directory:
+
+1. Download the model: [nomic-embed-text-v1.5](https://drive.google.com/file/d/1ZQXpdvSJk6ouHQkdhNJ9UbfSGwvaQ-Y3/view?usp=drive_link)
+2. Extract and place in `~/.agentcrew/models/`
+
+The directory structure should look like:
+```
+~/.agentcrew/models/
+  └── models--nomic-ai--nomic-embed-text-v1.5/
+      ├── blobs/
+      ├── refs/
+      └── snapshots/
+```
+
+AgentCrew detects the model automatically on startup. No API key or internet connection is needed — the model runs entirely on your machine.
+
 ## CLI Agent Turn Detection
 
 AgentCrew detects when a CLI agent's turn is complete using two signals:
@@ -175,7 +195,7 @@ Agent replies containing `@other-agent` are displayed as plain text — no re-ro
 | Frontend | React 19, TypeScript 5, Zustand 5 |
 | Terminal | xterm.js 5, @xterm/headless 5, node-pty 1 |
 | Database | better-sqlite3 12 |
-| Memory | Memvid JSON shim (upgradeable to @memvid/sdk) |
+| Memory | @memvid/sdk 2 (.mv2 format) |
 | Build | electron-vite 5, Vite 6, electron-builder 26 |
 | Icons | lucide-react |
 

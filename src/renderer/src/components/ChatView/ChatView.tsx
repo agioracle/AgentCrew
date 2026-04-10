@@ -15,6 +15,11 @@ export function ChatView() {
   const channels = useAppStore(s => s.channels)
   const agents = useAppStore(s => s.agents)
   const messages = useAppStore(s => s.messages)
+  const hasMoreMessages = useAppStore(s => s.hasMoreMessages)
+  const loadingOlder = useAppStore(s => s.loadingOlder)
+  const loadOlderMessages = useAppStore(s => s.loadOlderMessages)
+  const thinkingAgents = useAppStore(s => s.thinkingAgents)
+  const streamingMessages = useAppStore(s => s.streamingMessages)
   const openModal = useAppStore(s => s.openModal)
   const terminalOpenMap = useAppStore(s => s.terminalOpen)
   const toggleTerminal = useAppStore(s => s.toggleTerminal)
@@ -57,12 +62,51 @@ export function ChatView() {
     if (isDm && tab === 'agents') setTab('chat')
   }, [isDm, activeChannelId])
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom only when new messages are appended (not when older messages are prepended)
+  const prevMessageCountRef = useRef(0)
+  const loadingOlderRef = useRef(false)
   useEffect(() => {
     if (scrollRef.current) {
+      const prevCount = prevMessageCountRef.current
+      const isOlderLoad = loadingOlderRef.current
+      prevMessageCountRef.current = messages.length
+      // Skip auto-scroll if we just loaded older messages (prepended to top)
+      if (isOlderLoad) {
+        loadingOlderRef.current = false
+        return
+      }
+      // Auto-scroll for initial load or new messages appended at bottom
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
+
+  // Auto-scroll when thinking indicators or streaming messages update
+  useEffect(() => {
+    const hasActivity =
+      Object.keys(thinkingAgents).some(key => key.endsWith(`:${activeChannelId}`)) ||
+      Object.keys(streamingMessages).some(key => key.endsWith(`:${activeChannelId}`))
+    if (hasActivity && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [thinkingAgents, streamingMessages, activeChannelId])
+
+  // Load older messages when user scrolls near the top
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current || !hasMoreMessages || loadingOlder) return
+    if (scrollRef.current.scrollTop < 100) {
+      const el = scrollRef.current
+      const prevScrollHeight = el.scrollHeight
+      loadingOlderRef.current = true
+      loadOlderMessages().then(() => {
+        // Preserve scroll position: adjust scrollTop by the height difference
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight - prevScrollHeight
+          }
+        })
+      })
+    }
+  }, [hasMoreMessages, loadingOlder, loadOlderMessages])
 
   // Drag handler for resizing terminal
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -169,7 +213,7 @@ export function ChatView() {
       {/* Content */}
       {tab === 'chat' ? (
         <>
-          <div className="timeline-scroll" ref={scrollRef} style={{ flex: 1, minHeight: MIN_CHAT_HEIGHT }}>
+          <div className="timeline-scroll" ref={scrollRef} style={{ flex: 1, minHeight: MIN_CHAT_HEIGHT }} onScroll={handleScroll}>
             <MessageTimeline />
           </div>
           <MessageInput />

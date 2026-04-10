@@ -139,10 +139,10 @@ export class MessageRouter {
     return clean.replace(/\s+/g, ' ').trim()
   }
 
-  private recallContext(agent: AgentRecord, channelId: string, prompt: string): string {
+  private async recallContext(agent: AgentRecord, channelId: string, prompt: string): Promise<string> {
     try {
       const channel = this.ctx.repository.getChannel(channelId)
-      const recalls = this.ctx.memoryService.recall({
+      const recalls = await this.ctx.memoryService.recall({
         channelCapsuleId: channel.memoryCapsuleId ?? `channel-${channelId}`,
         agentCapsuleId: agent.memoryCapsuleId ?? `agent-${agent.id}`,
         agentId: agent.id,
@@ -157,13 +157,13 @@ export class MessageRouter {
     }
   }
 
-  private retainMemory(agent: AgentRecord, channelId: string, content: string): void {
+  private async retainMemory(agent: AgentRecord, channelId: string, content: string): Promise<void> {
     // Don't retain error messages or empty output to memory
     if (!content || content === '(No output)' || content.startsWith('Error:') || content.startsWith('CLI agent exited')) return
     try {
       const channel = this.ctx.repository.getChannel(channelId)
       // Retain to agent private capsule
-      this.ctx.memoryService.retain({
+      await this.ctx.memoryService.retain({
         capsuleId: agent.memoryCapsuleId ?? `agent-${agent.id}`,
         channelId,
         content: content.slice(0, 500),
@@ -171,7 +171,7 @@ export class MessageRouter {
         agentId: agent.id,
       })
       // Retain to channel shared capsule
-      this.ctx.memoryService.retain({
+      await this.ctx.memoryService.retain({
         capsuleId: channel.memoryCapsuleId ?? `channel-${channelId}`,
         channelId,
         content: content.slice(0, 500),
@@ -584,10 +584,16 @@ Hello. How can I help you today?
 
     console.log('[MessageRouter] Summarizing CLI output via LLM...')
 
+    let summaryResponse = ''
     ApiClient.streamChat(
       { endpoint, apiKey, model, systemPrompt },
       [{ role: 'user', content: `Summarize the following CLI tool output:\n\n${cleanText}` }],
-      () => {}, // onChunk — we don't stream the summary
+      (chunk) => {
+        // Stop thinking on first chunk — streaming text replaces the thinking indicator
+        this.stopThinking(agent.id, channelId)
+        summaryResponse += chunk
+        this.broadcast({ type: 'agent-stream-chunk', agentId: agent.id, channelId, chunk, fullText: summaryResponse })
+      },
       (fullText) => {
         // Success — use LLM summary
         const summary = fullText?.trim() || summarizeOutput(cleanText)
@@ -601,8 +607,7 @@ Hello. How can I help you today?
     )
   }
 
-  private postCliReply(agent: AgentRecord, channelId: string, content: string): void {
-    this.stopThinking(agent.id, channelId)
+  private async postCliReply(agent: AgentRecord, channelId: string, content: string): Promise<void> {
     const replyMsg = this.ctx.repository.createMessage({
       channelId,
       senderType: 'agent',
@@ -610,18 +615,20 @@ Hello. How can I help you today?
       content,
     })
     this.broadcast(replyMsg)
-    this.retainMemory(agent, channelId, content)
+    this.stopThinking(agent.id, channelId)
     this.ctx.repository.updateAgentStatus(agent.id, 'idle')
+    // Retain memory (fire-and-forget, don't block reply)
+    this.retainMemory(agent, channelId, content).catch(err => console.error('[Memory] retain failed:', err))
   }
 
-  private dispatchApi(agent: AgentRecord, channelId: string, prompt: string, images: Omit<MessageAttachment, 'id'>[] = []): void {
+  private async dispatchApi(agent: AgentRecord, channelId: string, prompt: string, images: Omit<MessageAttachment, 'id'>[] = []): Promise<void> {
     if (!agent.apiEndpoint || !agent.apiKey || !agent.model) {
       this.postError(channelId, agent.id, new Error('API agent missing endpoint, key, or model configuration'))
       return
     }
 
     // Enrich prompt with memory context
-    const enrichedPrompt = this.recallContext(agent, channelId, prompt)
+    const enrichedPrompt = await this.recallContext(agent, channelId, prompt)
 
     this.ctx.repository.updateAgentStatus(agent.id, 'running')
 
@@ -670,7 +677,7 @@ Hello. How can I help you today?
       chatMessages,
       // onChunk
       (chunk) => {
-        // Stop thinking on first chunk — streaming has started
+        // Stop thinking on first chunk — streaming text replaces the thinking indicator
         this.stopThinking(agent.id, channelId)
         fullResponse += chunk
         // Stream partial updates to renderer
@@ -685,9 +692,10 @@ Hello. How can I help you today?
           content: fullText || '(No response)',
         })
         this.broadcast(replyMsg)
+        this.stopThinking(agent.id, channelId)
         this.ctx.repository.updateAgentStatus(agent.id, 'idle')
-        // Retain memory
-        this.retainMemory(agent, channelId, fullText || '')
+        // Retain memory (fire-and-forget)
+        this.retainMemory(agent, channelId, fullText || '').catch(err => console.error('[Memory] retain failed:', err))
       },
       // onError
       (err) => {

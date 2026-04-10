@@ -15,11 +15,18 @@ files:
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-addon-api/**/*
+  - node_modules/@memvid/sdk/**/*
+  - node_modules/@memvid/sdk-darwin-arm64/**/*
+  - node_modules/@memvid/sdk-darwin-x64/**/*
+  - node_modules/@memvid/sdk-win32-x64-msvc/**/*
+  - node_modules/@memvid/sdk-linux-x64-gnu/**/*
+  - node_modules/@memvid/sdk-linux-arm64-gnu/**/*
 
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/node-pty/**/*
+  - node_modules/@memvid/sdk-*/**/*.node
   - "**/*.node"
 
 mac:
