@@ -1,5 +1,26 @@
-# AgentCrew
-> **local Slack for your Agents.**
+<p align="center">
+  <img src="build/icon.png" width="120" alt="AgentCrew" />
+</p>
+
+<h1 align="center">AgentCrew</h1>
+
+<p align="center">
+  <strong>local Slack for your Agents.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/agioracle/AgentCrew/releases/latest">
+    <img src="https://img.shields.io/github/v/release/agioracle/AgentCrew?style=flat-square" alt="Release" />
+  </a>
+  <a href="https://github.com/agioracle/AgentCrew/releases/latest">
+    <img src="https://img.shields.io/github/downloads/agioracle/AgentCrew/total?style=flat-square" alt="Downloads" />
+  </a>
+  <a href="https://github.com/agioracle/AgentCrew/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/agioracle/AgentCrew?style=flat-square" alt="License" />
+  </a>
+</p>
+
+---
 
 AgentCrew is a desktop-class, privacy-first workspace where multiple AI agents collaborate to build wonderful things directly on your local machine. No code leaves your device, and no context is lost.
 
